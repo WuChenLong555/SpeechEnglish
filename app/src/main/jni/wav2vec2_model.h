@@ -17,6 +17,7 @@ namespace wav2vec2 {
         static const int INPUT_SIZE = 400;         // 输入帧大小 (25ms * 16000Hz)
         static const int HOP_LENGTH = 320;         // 步长 (20ms * 16000Hz)，修正为论文中的值
         static const int CONTEXT_SIZE = 150;       // 上下文大小，从para文件中可见
+        static constexpr int VOCAB_SIZE = 392;
     };
 
     // 关键层名称

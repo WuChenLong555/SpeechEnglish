@@ -21,6 +21,11 @@ public class Wav2Vec2 {
     private static final float THRESHOLD = 0.5f;  // 输出阈值
     private boolean isInitialized = false;
     private Context context;
+    private static final int MAX_AUDIO_LENGTH = 1600000; // 约100秒的16kHz音频
+    private static final String BLANK_TOKEN = "<blank>";  // CTC空白标记
+    private static final float LOG_THRESHOLD = -15.0f;  // 对数概率阈值
+    private static final float RELAXED_LOG_THRESHOLD = -16.0f;  // 更宽松的对数概率阈值
+    private static final float RELATIVE_THRESHOLD = 5.0f;  // 相对于最大值的阈值差异
 
     static {
         try {
@@ -135,126 +140,264 @@ public class Wav2Vec2 {
     }
 
     public String[] processAndDecode(float[] audioData) {
-        if (!isInitialized) {
-            Log.e(TAG, "Wav2Vec2 not properly initialized");
-            return null;
-        }
-
         if (audioData == null || audioData.length == 0) {
-            Log.e(TAG, "Invalid audio data");
+            Log.e(TAG, "音频数据为空或长度为0");
             return null;
         }
 
-        // 检查音频数据长度是否合理
-        if (audioData.length > 1600000) { // 约100秒@16kHz
-            Log.e(TAG, "Audio data too long: " + audioData.length + " samples");
-            return null;
-        }
-
-        // 检查音频数据值是否在合理范围内
-        boolean hasValidSamples = false;
+        // 验证音频数据
+        boolean hasValidData = false;
         for (float sample : audioData) {
-            if (Float.isNaN(sample) || Float.isInfinite(sample)) {
-                Log.e(TAG, "Invalid audio sample detected: " + sample);
-                return null;
-            }
-            if (Math.abs(sample) > 0.0001f) {
-                hasValidSamples = true;
+            if (Math.abs(sample) > 1e-6) {
+                hasValidData = true;
+                break;
             }
         }
+        if (!hasValidData) {
+            Log.e(TAG, "音频数据全为0或噪声太小");
+            return null;
+        }
 
-        if (!hasValidSamples) {
-            Log.e(TAG, "Audio data contains only silence or very low amplitude");
+        // 检查音频长度是否在合理范围内
+        if (audioData.length > MAX_AUDIO_LENGTH) {
+            Log.e(TAG, "音频数据太长: " + audioData.length + " 样本");
             return null;
         }
 
         try {
-            Log.i(TAG, "Processing audio data of length: " + audioData.length);
-            float[] logits = process(nativeHandle, audioData);
+            float[] logits = process(audioData);
             if (logits == null) {
-                Log.e(TAG, "Process returned null logits");
+                Log.e(TAG, "模型处理返回空结果");
                 return null;
             }
-            
-            // 检查logits的维度是否合理
-            if (logits.length == 0 || logits.length % tokens.length != 0) {
-                Log.e(TAG, "Invalid logits dimension: " + logits.length);
-                return null;
-            }
-            
-            // 找出每个时间步最可能的音素
-            List<String> phonemes = new ArrayList<>();
-            int numTokens = tokens.length;
-            int timeSteps = logits.length / numTokens;
-            
-            Log.d(TAG, "Processing logits: timeSteps=" + timeSteps + ", numTokens=" + numTokens);
-            
-            for (int t = 0; t < timeSteps; t++) {
-                int maxIdx = -1;
-                float maxVal = Float.NEGATIVE_INFINITY;
-                
-                // 在当前时间步找出概率最大的音素
-                for (int i = 0; i < numTokens; i++) {
-                    float val = logits[t * numTokens + i];
-                    // 检查logit值是否有效
-                    if (Float.isNaN(val) || Float.isInfinite(val)) {
-                        Log.e(TAG, "Invalid logit value at position " + (t * numTokens + i) + ": " + val);
-                        continue;
-                    }
-                    if (val > maxVal) {
-                        maxVal = val;
-                        maxIdx = i;
-                    }
-                }
-                
-                // 如果概率超过阈值，添加到结果中
-                if (maxVal > THRESHOLD && maxIdx >= 0 && maxIdx < tokens.length) {
-                    // 跳过特殊标记（<pad>, <s>, </s>, <unk>）
-                    if (maxIdx > 3) {
-                        phonemes.add(tokens[maxIdx]);
-                    }
+
+            // 验证logits数据
+            for (float logit : logits) {
+                if (Float.isNaN(logit) || Float.isInfinite(logit)) {
+                    Log.e(TAG, "模型输出包含无效值(NaN或Infinite)");
+                    return null;
                 }
             }
-            
-            if (phonemes.isEmpty()) {
-                Log.w(TAG, "No phonemes detected above threshold");
-                return new String[0];
-            }
-            
-            Log.i(TAG, "Successfully decoded " + phonemes.size() + " phonemes");
-            return phonemes.toArray(new String[0]);
+
+            return decode(logits);
         } catch (Exception e) {
-            Log.e(TAG, "Error in processAndDecode: " + e.getMessage());
+            Log.e(TAG, "处理音频时发生错误: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
     }
 
-    public float[] process(float[] audioData) {
+    private float[] process(float[] audioData) {
         if (!isInitialized) {
-            Log.e(TAG, "Cannot process: Wav2Vec2 not initialized");
+            Log.e(TAG, "Wav2Vec2未正确初始化");
             return null;
         }
 
-        if (audioData == null || audioData.length == 0) {
-            Log.e(TAG, "Invalid audio data");
+        if (nativeHandle == 0) {
+            Log.e(TAG, "本地模型句柄无效");
+            return null;
+        }
+
+        // 检查可用内存
+        Runtime runtime = Runtime.getRuntime();
+        long maxMemory = runtime.maxMemory();
+        long totalMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        long availableMemory = maxMemory - (totalMemory - freeMemory);
+
+        // 估算所需内存（这是一个粗略估计）
+        long estimatedMemoryNeeded = audioData.length * 4L * 4L; // 假设每个样本需要4倍的处理空间
+        if (availableMemory < estimatedMemoryNeeded) {
+            Log.e(TAG, String.format("内存不足。需要: %d MB, 可用: %d MB", 
+                estimatedMemoryNeeded / (1024*1024), 
+                availableMemory / (1024*1024)));
             return null;
         }
 
         try {
-            // 在调用native方法之前添加内存检查
-            long requiredMemory = audioData.length * 4L; // 每个float占4字节
-            Runtime runtime = Runtime.getRuntime();
-            long freeMemory = runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory();
+            Log.i(TAG, "开始处理音频数据，长度: " + audioData.length);
+            float[] logits = process(nativeHandle, audioData);
             
-            if (freeMemory < requiredMemory * 2) { // 预留2倍内存空间
-                Log.e(TAG, "Insufficient memory for processing. Required: " + requiredMemory + ", Free: " + freeMemory);
+            if (logits == null) {
+                Log.e(TAG, "本地处理返回空结果");
                 return null;
             }
 
-            return process(nativeHandle, audioData);
+            // 验证输出维度
+            if (logits.length == 0) {
+                Log.e(TAG, "输出数组长度为0");
+                return null;
+            }
+
+            // 验证输出维度是否为NUM_TOKENS的整数倍
+            if (logits.length % tokens.length != 0) {
+                Log.e(TAG, String.format("输出维度异常: %d 不是音素数量 %d 的整数倍", 
+                    logits.length, tokens.length));
+                return null;
+            }
+
+            int timeSteps = logits.length / tokens.length;
+            Log.i(TAG, String.format("音频处理成功完成: %d个时间步 × %d个音素 = %d个logits", 
+                timeSteps, tokens.length, logits.length));
+
+            return logits;
         } catch (Exception e) {
-            Log.e(TAG, "Error in process: " + e.getMessage());
+            Log.e(TAG, "处理音频时发生异常: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public String[] decode(float[] logits) {
+        if (logits == null || tokens == null || tokens.length == 0) {
+            Log.e(TAG, "logits或tokens为空");
+            return null;
+        }
+
+        // 检查logits的维度是否正确
+        if (logits.length % tokens.length != 0) {
+            Log.e(TAG, "logits维度与tokens数量不匹配");
+            return null;
+        }
+
+        int timeSteps = logits.length / tokens.length;
+        List<String> result = new ArrayList<>();
+        String prevToken = null;  // 用于跟踪前一个token
+
+        try {
+            Log.i(TAG, "开始CTC解码，时间步数: " + timeSteps);
+
+            // 对每个时间步进行解码
+            for (int t = 0; t < timeSteps; t++) {
+                int startIdx = t * tokens.length;
+                
+                // 找出当前时间步的最大对数概率及其索引
+                float maxLogit = Float.NEGATIVE_INFINITY;
+                int maxIndex = -1;
+                
+                // 首先找出最大值
+                for (int i = 0; i < tokens.length; i++) {
+                    float logit = logits[startIdx + i];
+                    if (!Float.isNaN(logit) && !Float.isInfinite(logit) && logit > maxLogit) {
+                        maxLogit = logit;
+                        maxIndex = i;
+                    }
+                }
+
+                // 如果最大值太小，跳过这个时间步
+                if (maxLogit < RELAXED_LOG_THRESHOLD) {
+                    continue;
+                }
+
+                // 检查是否有其他token的概率接近最大值
+                boolean hasCloseCompetitor = false;
+                for (int i = 0; i < tokens.length; i++) {
+                    if (i != maxIndex) {
+                        float logit = logits[startIdx + i];
+                        if (!Float.isNaN(logit) && !Float.isInfinite(logit) && 
+                            (maxLogit - logit) < RELATIVE_THRESHOLD) {
+                            hasCloseCompetitor = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 如果有接近的竞争者且最大值不够大，跳过这个时间步
+                if (hasCloseCompetitor && maxLogit < LOG_THRESHOLD) {
+                    continue;
+                }
+
+                // 应用CTC解码规则
+                if (maxIndex >= 0 && maxIndex < tokens.length) {
+                    String currentToken = tokens[maxIndex];
+                    
+                    // CTC解码规则：
+                    // 1. 跳过空白标记
+                    // 2. 合并重复的连续标记
+                    // 3. 保留非重复的有效标记
+                    if (!currentToken.equals(BLANK_TOKEN)) {  // 规则1
+                        if (!currentToken.equals(prevToken)) {  // 规则2
+                            result.add(currentToken);  // 规则3
+                            prevToken = currentToken;
+                            Log.d(TAG, String.format("时间步 %d: 添加token '%s' (对数概率: %.3f)", 
+                                t, currentToken, maxLogit));
+                        }
+                    } else {
+                        prevToken = null;  // 重置prevToken，允许下一个相同的token出现
+                    }
+                }
+            }
+
+            Log.i(TAG, "CTC解码完成，得到 " + result.size() + " 个音素");
+            
+            // 如果结果为空，使用更宽松的阈值重试
+            if (result.isEmpty()) {
+                Log.w(TAG, "解码结果为空，尝试使用更宽松的阈值进行解码");
+                return decodeWithRelaxedThreshold(logits);
+            }
+
+            return result.toArray(new String[0]);
+        } catch (Exception e) {
+            Log.e(TAG, "CTC解码过程发生错误: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private String[] decodeWithRelaxedThreshold(float[] logits) {
+        int timeSteps = logits.length / tokens.length;
+        List<String> result = new ArrayList<>();
+        String prevToken = null;
+
+        try {
+            for (int t = 0; t < timeSteps; t++) {
+                int startIdx = t * tokens.length;
+                float maxLogit = Float.NEGATIVE_INFINITY;
+                int maxIndex = -1;
+
+                // 找出最大对数概率的token
+                for (int i = 0; i < tokens.length; i++) {
+                    float logit = logits[startIdx + i];
+                    if (!Float.isNaN(logit) && !Float.isInfinite(logit) && logit > maxLogit) {
+                        maxLogit = logit;
+                        maxIndex = i;
+                    }
+                }
+
+                // 使用更宽松的阈值
+                if (maxIndex >= 0 && maxIndex < tokens.length && maxLogit > RELAXED_LOG_THRESHOLD) {
+                    String currentToken = tokens[maxIndex];
+                    if (!currentToken.equals(BLANK_TOKEN) && !currentToken.equals(prevToken)) {
+                        // 计算当前token的对数概率与其他token的平均差异
+                        float avgDiff = 0.0f;
+                        int validCount = 0;
+                        for (int i = 0; i < tokens.length; i++) {
+                            if (i != maxIndex) {
+                                float logit = logits[startIdx + i];
+                                if (!Float.isNaN(logit) && !Float.isInfinite(logit)) {
+                                    avgDiff += (maxLogit - logit);
+                                    validCount++;
+                                }
+                            }
+                        }
+                        avgDiff = validCount > 0 ? avgDiff / validCount : 0.0f;
+
+                        // 只有当当前token明显优于其他token时才添加
+                        if (avgDiff > RELATIVE_THRESHOLD / 2) {
+                            result.add(currentToken);
+                            prevToken = currentToken;
+                            Log.d(TAG, String.format("备选解码 - 时间步 %d: 添加token '%s' (对数概率: %.3f, 平均差异: %.3f)", 
+                                t, currentToken, maxLogit, avgDiff));
+                        }
+                    }
+                }
+            }
+
+            Log.i(TAG, "备选解码完成，得到 " + result.size() + " 个音素");
+            return result.toArray(new String[0]);
+        } catch (Exception e) {
+            Log.e(TAG, "备选解码过程发生错误: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }

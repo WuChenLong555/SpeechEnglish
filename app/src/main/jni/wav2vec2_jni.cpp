@@ -12,118 +12,11 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-class ScaledDotProductAttention : public ncnn::Layer
-{
-public:
-    ScaledDotProductAttention()
-    {
-        one_blob_only = false;
-        support_inplace = false;
-    }
-
-    virtual int forward(const std::vector<ncnn::Mat>& bottom_blobs, std::vector<ncnn::Mat>& top_blobs, const ncnn::Option& opt) const
-    {
-        const ncnn::Mat& q = bottom_blobs[0];
-        const ncnn::Mat& k = bottom_blobs[1];
-        const ncnn::Mat& v = bottom_blobs[2];
-
-        int batch = q.c;
-        int num_heads = q.h;
-        int seq_len = q.w;
-        int head_dim = q.elemsize;
-
-        float scale = 1.0f / sqrt(head_dim);
-
-        ncnn::Mat& out = top_blobs[0];
-        out.create(seq_len, num_heads, batch);
-        if (out.empty())
-        {
-            LOGE("Failed to create output blob");
-            return -1;
-        }
-
-        #pragma omp parallel for
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < num_heads; h++)
-            {
-                // 使用Mat的data指针直接访问数据
-                float* q_ptr = (float*)q.channel(b).row(h);
-                float* k_ptr = (float*)k.channel(b).row(h);
-                float* v_ptr = (float*)v.channel(b).row(h);
-                float* out_ptr = (float*)out.channel(b).row(h);
-
-                // 创建临时scores矩阵
-                ncnn::Mat scores(seq_len, seq_len);
-                if (scores.empty())
-                {
-                    LOGE("Failed to create scores matrix");
-                    continue;
-                }
-                float* scores_ptr = (float*)scores.data;
-
-                // 计算Q*K^T
-                for (int i = 0; i < seq_len; i++)
-                {
-                    for (int j = 0; j < seq_len; j++)
-                    {
-                        float sum = 0.f;
-                        for (int d = 0; d < head_dim; d++)
-                        {
-                            sum += q_ptr[i * head_dim + d] * k_ptr[j * head_dim + d];
-                        }
-                        scores_ptr[i * seq_len + j] = sum * scale;
-                    }
-                }
-
-                // Softmax
-                for (int i = 0; i < seq_len; i++)
-                {
-                    float max_val = -FLT_MAX;
-                    for (int j = 0; j < seq_len; j++)
-                    {
-                        max_val = std::max(max_val, scores_ptr[i * seq_len + j]);
-                    }
-
-                    float sum = 0.f;
-                    for (int j = 0; j < seq_len; j++)
-                    {
-                        scores_ptr[i * seq_len + j] = exp(scores_ptr[i * seq_len + j] - max_val);
-                        sum += scores_ptr[i * seq_len + j];
-                    }
-
-                    for (int j = 0; j < seq_len; j++)
-                    {
-                        scores_ptr[i * seq_len + j] /= sum;
-                    }
-                }
-
-                // 计算attention结果
-                for (int i = 0; i < seq_len; i++)
-                {
-                    for (int d = 0; d < head_dim; d++)
-                    {
-                        float sum = 0.f;
-                        for (int j = 0; j < seq_len; j++)
-                        {
-                            sum += scores_ptr[i * seq_len + j] * v_ptr[j * head_dim + d];
-                        }
-                        out_ptr[i * head_dim + d] = sum;
-                    }
-                }
-            }
-        }
-
-        return 0;
-    }
-};
-
-DEFINE_LAYER_CREATOR(ScaledDotProductAttention)
-
 class Wav2Vec2 {
 private:
     ncnn::Net net;
     bool initialized = false;
+    ncnn::Mat lastOutput;  // 保存最后的输出结果
 
     // 音频预处理参数
     static constexpr int SAMPLE_RATE = wav2vec2::ModelConfig::SAMPLE_RATE;
@@ -139,6 +32,14 @@ private:
         }
 
         LOGI("Starting audio preprocessing: length=%d samples", length);
+
+        // 验证输入数据
+        for(int i = 0; i < length; i++) {
+            if(std::isnan(audioData[i]) || std::isinf(audioData[i])) {
+                LOGE("Invalid input value at position %d: %f", i, audioData[i]);
+                return std::vector<float>();
+            }
+        }
 
         // 1. 归一化音频数据到[-1, 1]范围
         std::vector<float> normalized(length);
@@ -195,7 +96,6 @@ private:
 
 public:
     Wav2Vec2() {
-        // 不在构造函数中注册自定义层，而是在init方法中进行
     }
 
     bool init(AAssetManager* mgr) {
@@ -221,27 +121,19 @@ public:
 
         // 重置网络，确保初始化前是干净的状态
         net.clear();
-        
-        // 设置线程数和GPU加速
-        int num_threads = 4;  // 使用4个线程
-        bool use_gpu = false; // 默认不使用GPU
-        
-        // 设置NCNN选项
+
         ncnn::Option opt;
-        opt.num_threads = num_threads;
-        opt.lightmode = true;  // 使用轻量级模式
-        opt.use_vulkan_compute = use_gpu;  // 是否使用GPU加速
-
-        LOGI("Initializing with num_threads=%d, use_gpu=%d", num_threads, use_gpu);
+        opt.num_threads = 1;  // 先用单线程测试
+        opt.lightmode = false; // 关闭轻量模式进行测试
+        opt.use_vulkan_compute = false;
+        opt.use_fp16_storage = false; // 确保不使用fp16
+        opt.use_fp16_arithmetic = false;
         net.opt = opt;
-
-        // 注册自定义层 - 只在这里注册一次
-        LOGI("Registering custom layer");
-        int ret_layer = net.register_custom_layer("F.scaled_dot_product_attention", ScaledDotProductAttention_layer_creator);
-        if (ret_layer != 0) {
-            LOGE("Failed to register custom layer, error code: %d", ret_layer);
-            return false;
-        }
+//        opt.lightmode = true;  // 使用轻量级模式
+//        opt.use_vulkan_compute = use_gpu;  // 是否使用GPU加速
+//
+//        LOGI("Initializing with num_threads=%d, use_gpu=%d", num_threads, use_gpu);
+//        net.opt = opt;
 
         // ncnn模型格式，先加载param文件，再加载bin文件
         // 加载模型参数文件
@@ -249,23 +141,37 @@ public:
         int ret = net.load_param(mgr, "wav2vec2_emissions.ncnn.param");
         if (ret != 0) {
             LOGE("Failed to load param file, error code: %d", ret);
-            net.clear();
             return false;
         }
-        LOGI("Successfully loaded param file");
 
         // 加载模型权重文件
-        LOGI("Loading model bin file: wav2vec2_emissions.ncnn.bin");
+        LOGI("Loading model bin file");
         ret = net.load_model(mgr, "wav2vec2_emissions.ncnn.bin");
         if (ret != 0) {
             LOGE("Failed to load model file, error code: %d", ret);
-            net.clear();
             return false;
         }
         LOGI("Successfully loaded model bin file");
 
         initialized = true;
         LOGI("Wav2Vec2 model successfully initialized");
+        const std::vector<int>& input_indexes = net.input_indexes();
+        const std::vector<int>& output_indexes = net.output_indexes();
+
+        LOGI("Network structure: input_layers=%d, output_layers=%d",
+             (int)input_indexes.size(), (int)output_indexes.size());
+
+        #if NCNN_STRING
+        const std::vector<const char*>& input_names = net.input_names();
+        const std::vector<const char*>& output_names = net.output_names();
+
+        for(size_t i = 0; i < input_names.size(); i++) {
+            LOGI("Input layer %d: %s", (int)i, input_names[i]);
+        }
+        for(size_t i = 0; i < output_names.size(); i++) {
+            LOGI("Output layer %d: %s", (int)i, output_names[i]);
+        }
+        #endif
         return true;
     }
 
@@ -294,18 +200,12 @@ public:
 
         // 创建ncnn输入Extractor
         ncnn::Extractor ex = net.create_extractor();
-        
-        // 创建输入Mat
-        // 注意: NCNN要求的输入尺寸取决于模型的定义
-        ncnn::Mat in(processed.size(), 1);
+        ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
         if (in.empty()) {
             LOGE("Failed to create input Mat");
             return nullptr;
         }
-        
-        // 复制数据到输入Mat
-        memcpy(in.data, processed.data(), processed.size() * sizeof(float));
-        
+
         LOGI("Created input Mat: w=%d, h=%d, c=%d, dims=%d", in.w, in.h, in.c, in.dims);
         
         // 设置输入
@@ -316,35 +216,48 @@ public:
         }
         
         // 提取输出
-        ncnn::Mat out;
         LOGI("Extracting output: layer=%s", wav2vec2::OUTPUT_LAYER);
-        if(int ret = ex.extract(wav2vec2::OUTPUT_LAYER, out)) {
+        if(int ret = ex.extract(wav2vec2::OUTPUT_LAYER, lastOutput)) {
             LOGE("Failed to extract output: %d", ret);
             return nullptr;
         }
         
         LOGI("Inference completed: output dimensions = [%d, %d, %d, %d]", 
-            out.w, out.h, out.c, out.dims);
+            lastOutput.w, lastOutput.h, lastOutput.c, lastOutput.dims);
 
-        if(out.empty()) {
+        if(lastOutput.empty()) {
             LOGE("Output Mat is empty");
             return nullptr;
         }
 
-        // 分配结果内存并复制数据
-        int numTokens = wav2vec2::OutputConfig::NUM_TOKENS;
-        float* result = new(std::nothrow) float[numTokens];
+        // 验证输出数据
+        float* output_data = (float*)lastOutput.data;
+        int total_elements = lastOutput.w * lastOutput.h * lastOutput.c;
+        
+        // 检查输出中是否有无效值
+        for(int i = 0; i < total_elements; i++) {
+            if(std::isnan(output_data[i]) || std::isinf(output_data[i])) {
+                LOGE("Invalid output value at position %d: %f", i, output_data[i]);
+                output_data[i] = -std::numeric_limits<float>::infinity();  // 将无效值设为负无穷
+            }
+        }
+
+        // 分配结果内存并复制完整的输出数据
+        float* result = new(std::nothrow) float[total_elements];
         if (!result) {
-            LOGE("Failed to allocate result memory");
+            LOGE("Failed to allocate result memory for %d elements", total_elements);
             return nullptr;
         }
 
-        LOGI("Copying output data: %d tokens", numTokens);
-        // 确保不会越界复制
-        int copySize = std::min(numTokens, out.w * out.h * out.c);
-        memcpy(result, out.data, copySize * sizeof(float));
+        LOGI("Copying complete output data: %d tokens × %d time steps = %d elements", 
+            wav2vec2::OutputConfig::NUM_TOKENS, lastOutput.w, total_elements);
+        memcpy(result, lastOutput.data, total_elements * sizeof(float));
         
         return result;
+    }
+
+    const ncnn::Mat& getLastOutput() const {
+        return lastOutput;
     }
 
     void destroy() {
@@ -402,15 +315,23 @@ Java_com_example_speechenglish_Wav2Vec2_process(JNIEnv* env, jobject thiz, jlong
         return nullptr;
     }
 
-    jfloatArray output = env->NewFloatArray(wav2vec2::OutputConfig::NUM_TOKENS);
+    // 从ncnn::Mat的维度获取实际的输出大小
+    const ncnn::Mat& out = wav2vec2->getLastOutput();
+    int total_elements = out.w * out.h * out.c;
+    LOGI("Creating output array with %d elements (time_steps=%d × num_tokens=%d)", 
+        total_elements, out.w, wav2vec2::OutputConfig::NUM_TOKENS);
+
+    jfloatArray output = env->NewFloatArray(total_elements);
     if (!output) {
-        LOGE("Failed to create output array");
+        LOGE("Failed to create output array of size %d", total_elements);
         delete[] result;
         return nullptr;
     }
 
-    env->SetFloatArrayRegion(output, 0, wav2vec2::OutputConfig::NUM_TOKENS, result);
+    env->SetFloatArrayRegion(output, 0, total_elements, result);
     delete[] result;
+    
+    LOGI("Successfully transferred %d elements to Java", total_elements);
     return output;
 }
 
