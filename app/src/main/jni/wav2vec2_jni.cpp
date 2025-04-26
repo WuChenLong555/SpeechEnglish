@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include "wav2vec2_model.h"
+#include "force_aligner.h"
 
 #define TAG "Wav2Vec2"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -15,7 +16,7 @@
 class Wav2Vec2 {
 private:
     ncnn::Net net;
-    ncnn::Net net_gpu;
+    ncnn::VulkanDevice* vkdev;
     bool initialized = false;
     bool useGPU = false;
     ncnn::Mat lastOutput;  // 保存最后的输出结果
@@ -97,7 +98,16 @@ private:
     }
 
 public:
-    Wav2Vec2() {
+    Wav2Vec2() : vkdev(nullptr) {}
+
+    ~Wav2Vec2() {
+        if (vkdev) {
+            delete vkdev;
+            vkdev = nullptr;
+        }
+        if (useGPU) {
+            ncnn::destroy_gpu_instance();
+        }
     }
 
     bool init(AAssetManager* mgr) {
@@ -120,63 +130,75 @@ public:
             return false;
         }
 
-        // 重置网络，确保初始化前是干净的状态
+        // 重置网络
         net.clear();
-        net_gpu.clear();
+        //TODO
+        // 尝试初始化GPU失败，只用cpu了只能
+//        if (ncnn::get_gpu_count() > 0) {
+//            LOGI("Found %d GPU devices", ncnn::get_gpu_count());
+//
+//            // 创建GPU实例
+//            if (ncnn::create_gpu_instance() == 0) {
+//                LOGI("Successfully created GPU instance");
+//
+//                // 创建VulkanDevice
+//                vkdev = new ncnn::VulkanDevice();
+//
+//                if (vkdev && vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage()) {
+//                    LOGI("Device supports FP16, enabling GPU acceleration");
+//
+//                    // 配置GPU选项
+//                    ncnn::Option opt;
+//                    opt.lightmode = true;
+//                    opt.num_threads = 4;
+//                    opt.use_vulkan_compute = true;
+//                    opt.use_fp16_packed = true;
+//                    opt.use_fp16_storage = true;
+//                    opt.use_fp16_arithmetic = true;
+//
+//                    // 设置网络选项
+//                    net.opt = opt;
+//
+//                    // 设置vulkan设备
+//                    net.set_vulkan_device(vkdev);
+//
+//                    useGPU = true;
+//                } else {
+//                    LOGE("Device does not support required FP16 features");
+//                    if (vkdev) {
+//                        delete vkdev;
+//                        vkdev = nullptr;
+//                    }
+//                    ncnn::destroy_gpu_instance();
+//                }
+//            } else {
+//                LOGE("Failed to create GPU instance");
+//            }
+//        }
 
-        // 检查是否支持Vulkan
-        if (ncnn::get_gpu_count() > 0) {
-            LOGI("Vulkan is available, initializing GPU network");
-            
-            // 配置GPU选项
-            ncnn::Option opt_gpu;
-            opt_gpu.lightmode = true;
-            opt_gpu.num_threads = 4;
-            //TODO：在设置vulkan加速的时候出现问题，目前模型不支持vulkan加速。只有设置成false的时候同时吧fp16_storage设置为false才能运行。
-            opt_gpu.use_vulkan_compute = false;
-            opt_gpu.use_fp16_packed = true;
-            opt_gpu.use_fp16_storage = false;
-            opt_gpu.use_fp16_arithmetic = true;
-            
-            // 初始化GPU网络
-            net_gpu.opt = opt_gpu;
-            
-            // 加载模型到GPU
-            if (net_gpu.load_param(mgr, "wav2vec2_emissions.ncnn.param") != 0) {
-                LOGE("Failed to load GPU param file");
-                net_gpu.clear();
-            } else if (net_gpu.load_model(mgr, "wav2vec2_emissions.ncnn.bin") != 0) {
-                LOGE("Failed to load GPU model file");
-                net_gpu.clear();
-            } else {
-                useGPU = true;
-                LOGI("Successfully initialized GPU network");
-            }
+        // 如果GPU初始化失败，使用CPU模式
+        if (!useGPU) {
+            LOGI("Using CPU mode");
+            ncnn::Option opt;
+            opt.lightmode = true;
+            opt.num_threads = 4;
+            opt.use_vulkan_compute = false;
+            opt.use_fp16_storage = false;
+            net.opt = opt;
         }
 
-        // 无论GPU是否可用，都初始化CPU网络作为备份
-        ncnn::Option opt_cpu;
-        opt_cpu.lightmode = true;
-        opt_cpu.num_threads = 4;
-        opt_cpu.use_vulkan_compute = false;
-        opt_cpu.use_fp16_storage = false;
-        opt_cpu.use_fp16_arithmetic = true;
-        net.opt = opt_cpu;
-
-        // 加载模型到CPU
+        // 加载模型
         if (net.load_param(mgr, "wav2vec2_emissions.ncnn.param") != 0) {
-            LOGE("Failed to load CPU param file");
+            LOGE("Failed to load param file");
             return false;
         }
         if (net.load_model(mgr, "wav2vec2_emissions.ncnn.bin") != 0) {
-            LOGE("Failed to load CPU model file");
+            LOGE("Failed to load model file");
             return false;
         }
-        
-        LOGI("Successfully initialized CPU network");
-        initialized = true;
-        LOGI("Wav2Vec2 model initialized with %s acceleration", useGPU ? "GPU" : "CPU");
 
+        initialized = true;
+        LOGI("Model initialized with %s acceleration", useGPU ? "GPU" : "CPU");
         return true;
     }
 
@@ -203,12 +225,13 @@ public:
         
         LOGI("Preprocessed audio data: length=%zu samples", processed.size());
 
-        // 创建ncnn输入Extractor
-        ncnn::Extractor ex = useGPU ? net_gpu.create_extractor() : net.create_extractor();
+        // 创建推理器
+        ncnn::Extractor ex = net.create_extractor();
         if (useGPU) {
             ex.set_vulkan_compute(true);
         }
         
+        // 创建输入Mat
         ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
         if (in.empty()) {
             LOGE("Failed to create input Mat");
@@ -217,20 +240,17 @@ public:
 
         LOGI("Created input Mat: w=%d, h=%d, c=%d, dims=%d", in.w, in.h, in.c, in.dims);
         
-        // 设置输入
-        LOGI("Setting input: layer=%s", wav2vec2::INPUT_LAYER);
+        // 设置输入并执行推理
         if(int ret = ex.input(wav2vec2::INPUT_LAYER, in)) {
             LOGE("Failed to set input: %d", ret);
             return nullptr;
         }
         
-        // 提取输出
-        LOGI("Extracting output: layer=%s", wav2vec2::OUTPUT_LAYER);
         if(int ret = ex.extract(wav2vec2::OUTPUT_LAYER, lastOutput)) {
             LOGE("Failed to extract output: %d", ret);
             return nullptr;
         }
-        
+
         LOGI("Inference completed: output dimensions = [%d, %d, %d, %d]", 
             lastOutput.w, lastOutput.h, lastOutput.c, lastOutput.dims);
 
@@ -265,6 +285,30 @@ public:
         return result;
     }
 
+    float* forceAlign(const std::vector<int>& targets) {
+        if (!initialized || lastOutput.empty()) {
+            LOGE("Model not initialized or no output available");
+            return nullptr;
+        }
+
+        speech::alignment::AlignmentResult alignment = 
+            speech::alignment::ForceAligner::align(lastOutput, targets);
+        
+        if (alignment.empty()) {
+            LOGE("Force alignment failed");
+            return nullptr;
+        }
+        
+        // 将对齐结果转换为浮点数组
+        float* result = new float[alignment.size() * 2];
+        for (size_t i = 0; i < alignment.size(); i++) {
+            result[i * 2] = static_cast<float>(alignment.paths[i]);
+            result[i * 2 + 1] = alignment.scores[i];
+        }
+        
+        return result;
+    }
+
     const ncnn::Mat& getLastOutput() const {
         return lastOutput;
     }
@@ -273,7 +317,7 @@ public:
         if (initialized) {
             net.clear();
             if (useGPU) {
-                net_gpu.clear();
+                ncnn::destroy_gpu_instance();
             }
             initialized = false;
             useGPU = false;
@@ -306,46 +350,80 @@ Java_com_example_speechenglish_Wav2Vec2_init(JNIEnv* env, jobject thiz, jobject 
 }
 
 JNIEXPORT jfloatArray JNICALL
-Java_com_example_speechenglish_Wav2Vec2_process(JNIEnv* env, jobject thiz, jlong handle, jfloatArray audioData) {
-    Wav2Vec2* wav2vec2 = (Wav2Vec2*)handle;
+Java_com_example_speechenglish_Wav2Vec2_process(
+    JNIEnv* env, jobject thiz, jlong handle, jfloatArray audioData) {
+    
+    Wav2Vec2* wav2vec2 = reinterpret_cast<Wav2Vec2*>(handle);
     if (!wav2vec2) {
         LOGE("Invalid handle");
         return nullptr;
     }
 
     jsize length = env->GetArrayLength(audioData);
-    jfloat* audioDataPtr = env->GetFloatArrayElements(audioData, nullptr);
-    if (!audioDataPtr) {
+    jfloat* audio = env->GetFloatArrayElements(audioData, nullptr);
+    if (!audio) {
         LOGE("Failed to get audio data");
         return nullptr;
     }
 
-    float* result = wav2vec2->process(audioDataPtr, length);
-    env->ReleaseFloatArrayElements(audioData, audioDataPtr, 0);
+    float* result = wav2vec2->process(audio, length);
+    env->ReleaseFloatArrayElements(audioData, audio, JNI_ABORT);
 
     if (!result) {
-        LOGE("Process returned null result");
+        LOGE("Processing failed");
         return nullptr;
     }
 
-    // 从ncnn::Mat的维度获取实际的输出大小
     const ncnn::Mat& out = wav2vec2->getLastOutput();
-    int total_elements = out.w * out.h * out.c;
-    LOGI("Creating output array with %d elements (time_steps=%d × num_tokens=%d)", 
-        total_elements, out.w, wav2vec2::OutputConfig::NUM_TOKENS);
+    int total_elements = out.total();
+    
+    jfloatArray resultArray = env->NewFloatArray(total_elements);
+    if (resultArray) {
+        env->SetFloatArrayRegion(resultArray, 0, total_elements, result);
+    }
 
-    jfloatArray output = env->NewFloatArray(total_elements);
-    if (!output) {
-        LOGE("Failed to create output array of size %d", total_elements);
-        delete[] result;
+    delete[] result;
+    return resultArray;
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_example_speechenglish_Wav2Vec2_forceAlign(
+    JNIEnv* env, jobject thiz, jlong handle, jintArray targetSequence) {
+    
+    Wav2Vec2* wav2vec2 = reinterpret_cast<Wav2Vec2*>(handle);
+    if (!wav2vec2) {
+        LOGE("Invalid handle");
         return nullptr;
     }
 
-    env->SetFloatArrayRegion(output, 0, total_elements, result);
+    if (targetSequence == nullptr) {
+        LOGE("Target sequence is null");
+        return nullptr;
+    }
+
+    jsize targetLength = env->GetArrayLength(targetSequence);
+    jint* targetData = env->GetIntArrayElements(targetSequence, nullptr);
+    if (!targetData) {
+        LOGE("Failed to get target sequence data");
+        return nullptr;
+    }
+
+    std::vector<int> targets(targetData, targetData + targetLength);
+    env->ReleaseIntArrayElements(targetSequence, targetData, JNI_ABORT);
+
+    float* result = wav2vec2->forceAlign(targets);
+    if (!result) {
+        LOGE("Force alignment failed");
+        return nullptr;
+    }
+
+    jfloatArray resultArray = env->NewFloatArray(targetLength * 2);
+    if (resultArray) {
+        env->SetFloatArrayRegion(resultArray, 0, targetLength * 2, result);
+    }
+
     delete[] result;
-    
-    LOGI("Successfully transferred %d elements to Java", total_elements);
-    return output;
+    return resultArray;
 }
 
 JNIEXPORT void JNICALL

@@ -22,6 +22,7 @@ find_package(ncnn REQUIRED)
 set(SOURCES
     wav2vec2_jni.cpp
     vulkan_manager.cpp
+    force_aligner.cpp
 )
 
 # 创建共享库
@@ -32,6 +33,7 @@ add_library(wav2vec2 SHARED
 # 设置包含目录 - 修正包含路径
 target_include_directories(wav2vec2 PRIVATE
     ${CMAKE_SOURCE_DIR}/ncnn-20241226-android-vulkan/${ANDROID_ABI}/include/ncnn
+    ${CMAKE_SOURCE_DIR}  # 添加当前目录到包含路径
 )
 
 # 链接库
