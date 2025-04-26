@@ -15,7 +15,9 @@
 class Wav2Vec2 {
 private:
     ncnn::Net net;
+    ncnn::Net net_gpu;
     bool initialized = false;
+    bool useGPU = false;
     ncnn::Mat lastOutput;  // 保存最后的输出结果
 
     // 音频预处理参数
@@ -112,7 +114,6 @@ public:
         // 检查模型文件是否存在
         bool paramExists = assetExists(mgr, "wav2vec2_emissions.ncnn.param");
         bool binExists = assetExists(mgr, "wav2vec2_emissions.ncnn.bin");
-        bool tokensExists = assetExists(mgr, "model_tokens.txt");
         
         if (!paramExists || !binExists) {
             LOGE("Model files missing! param exists: %d, bin exists: %d", paramExists, binExists);
@@ -121,57 +122,61 @@ public:
 
         // 重置网络，确保初始化前是干净的状态
         net.clear();
+        net_gpu.clear();
 
-        ncnn::Option opt;
-        opt.num_threads = 1;  // 先用单线程测试
-        opt.lightmode = false; // 关闭轻量模式进行测试
-        opt.use_vulkan_compute = false;
-        opt.use_fp16_storage = false; // 确保不使用fp16
-        opt.use_fp16_arithmetic = false;
-        net.opt = opt;
-//        opt.lightmode = true;  // 使用轻量级模式
-//        opt.use_vulkan_compute = use_gpu;  // 是否使用GPU加速
-//
-//        LOGI("Initializing with num_threads=%d, use_gpu=%d", num_threads, use_gpu);
-//        net.opt = opt;
-
-        // ncnn模型格式，先加载param文件，再加载bin文件
-        // 加载模型参数文件
-        LOGI("Loading model param file: wav2vec2_emissions.ncnn.param");
-        int ret = net.load_param(mgr, "wav2vec2_emissions.ncnn.param");
-        if (ret != 0) {
-            LOGE("Failed to load param file, error code: %d", ret);
-            return false;
+        // 检查是否支持Vulkan
+        if (ncnn::get_gpu_count() > 0) {
+            LOGI("Vulkan is available, initializing GPU network");
+            
+            // 配置GPU选项
+            ncnn::Option opt_gpu;
+            opt_gpu.lightmode = true;
+            opt_gpu.num_threads = 4;
+            //TODO：在设置vulkan加速的时候出现问题，目前模型不支持vulkan加速。只有设置成false的时候同时吧fp16_storage设置为false才能运行。
+            opt_gpu.use_vulkan_compute = false;
+            opt_gpu.use_fp16_packed = true;
+            opt_gpu.use_fp16_storage = false;
+            opt_gpu.use_fp16_arithmetic = true;
+            
+            // 初始化GPU网络
+            net_gpu.opt = opt_gpu;
+            
+            // 加载模型到GPU
+            if (net_gpu.load_param(mgr, "wav2vec2_emissions.ncnn.param") != 0) {
+                LOGE("Failed to load GPU param file");
+                net_gpu.clear();
+            } else if (net_gpu.load_model(mgr, "wav2vec2_emissions.ncnn.bin") != 0) {
+                LOGE("Failed to load GPU model file");
+                net_gpu.clear();
+            } else {
+                useGPU = true;
+                LOGI("Successfully initialized GPU network");
+            }
         }
 
-        // 加载模型权重文件
-        LOGI("Loading model bin file");
-        ret = net.load_model(mgr, "wav2vec2_emissions.ncnn.bin");
-        if (ret != 0) {
-            LOGE("Failed to load model file, error code: %d", ret);
+        // 无论GPU是否可用，都初始化CPU网络作为备份
+        ncnn::Option opt_cpu;
+        opt_cpu.lightmode = true;
+        opt_cpu.num_threads = 4;
+        opt_cpu.use_vulkan_compute = false;
+        opt_cpu.use_fp16_storage = false;
+        opt_cpu.use_fp16_arithmetic = true;
+        net.opt = opt_cpu;
+
+        // 加载模型到CPU
+        if (net.load_param(mgr, "wav2vec2_emissions.ncnn.param") != 0) {
+            LOGE("Failed to load CPU param file");
             return false;
         }
-        LOGI("Successfully loaded model bin file");
-
+        if (net.load_model(mgr, "wav2vec2_emissions.ncnn.bin") != 0) {
+            LOGE("Failed to load CPU model file");
+            return false;
+        }
+        
+        LOGI("Successfully initialized CPU network");
         initialized = true;
-        LOGI("Wav2Vec2 model successfully initialized");
-        const std::vector<int>& input_indexes = net.input_indexes();
-        const std::vector<int>& output_indexes = net.output_indexes();
+        LOGI("Wav2Vec2 model initialized with %s acceleration", useGPU ? "GPU" : "CPU");
 
-        LOGI("Network structure: input_layers=%d, output_layers=%d",
-             (int)input_indexes.size(), (int)output_indexes.size());
-
-        #if NCNN_STRING
-        const std::vector<const char*>& input_names = net.input_names();
-        const std::vector<const char*>& output_names = net.output_names();
-
-        for(size_t i = 0; i < input_names.size(); i++) {
-            LOGI("Input layer %d: %s", (int)i, input_names[i]);
-        }
-        for(size_t i = 0; i < output_names.size(); i++) {
-            LOGI("Output layer %d: %s", (int)i, output_names[i]);
-        }
-        #endif
         return true;
     }
 
@@ -199,7 +204,11 @@ public:
         LOGI("Preprocessed audio data: length=%zu samples", processed.size());
 
         // 创建ncnn输入Extractor
-        ncnn::Extractor ex = net.create_extractor();
+        ncnn::Extractor ex = useGPU ? net_gpu.create_extractor() : net.create_extractor();
+        if (useGPU) {
+            ex.set_vulkan_compute(true);
+        }
+        
         ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
         if (in.empty()) {
             LOGE("Failed to create input Mat");
@@ -263,7 +272,11 @@ public:
     void destroy() {
         if (initialized) {
             net.clear();
+            if (useGPU) {
+                net_gpu.clear();
+            }
             initialized = false;
+            useGPU = false;
         }
     }
 };

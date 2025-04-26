@@ -58,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TEST_WAV = "000010069.wav";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private List<String> pendingPermissions = new ArrayList<>();
+    private VulkanManager vulkanManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +68,22 @@ public class MainActivity extends AppCompatActivity {
         initializeViews();
 
         checkAndRequestPermissions();
+
+        // 初始化Vulkan
+        if (VulkanManager.checkVulkanSupport(this)) {
+            vulkanManager = VulkanManager.getInstance();
+            if (vulkanManager.isVulkanAvailable()) {
+                Toast.makeText(this, "Vulkan加速已启用", Toast.LENGTH_SHORT).show();
+                Log.i(TAG, "Vulkan加速已启用");
+            } else {
+                String errorMsg = vulkanManager.getInitErrorMessage();
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show();
+                Log.w(TAG, errorMsg);
+            }
+        } else {
+            Log.i(TAG, "设备不支持Vulkan,将使用CPU模式");
+            Toast.makeText(this, "设备不支持Vulkan,将使用CPU模式", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void initializeViews() {
@@ -612,6 +629,9 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "销毁Wav2Vec2时出错", e);
             }
+        }
+        if (vulkanManager != null) {
+            vulkanManager.release();
         }
     }
 } 

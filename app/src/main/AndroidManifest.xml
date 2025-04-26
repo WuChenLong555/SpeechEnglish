@@ -3,6 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.speechenglish">
 
+    <!-- Vulkan相关声明 -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="false" />
+    <uses-feature android:name="android.hardware.vulkan.level" android:version="0" android:required="false" />
+    <uses-feature android:name="android.hardware.vulkan.compute" android:version="0" android:required="false" />
+
     <queries>
         <!-- 用于 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION -->
         <intent>

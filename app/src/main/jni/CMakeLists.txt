@@ -21,6 +21,7 @@ find_package(ncnn REQUIRED)
 # 添加源文件
 set(SOURCES
     wav2vec2_jni.cpp
+    vulkan_manager.cpp
 )
 
 # 创建共享库
@@ -38,4 +39,5 @@ target_link_libraries(wav2vec2
     ncnn
     android
     log
+    vulkan
 ) 
