@@ -28,12 +28,26 @@ void forced_align_impl(
                                  .device(logProbs.device())
                                  .dtype(logProbs.dtype()))
                              .fill_(kNegInfinity);
+  /c++
+  // 初始化回溯指针张量，用于存储解码路径的前驱指针
   torch::Tensor backPtr = torch::empty({T, S}, torch::kInt8).fill_(-1);
+
+  // 获取logProbs的访问器，用于后续计算中直接访问张量元素
   auto logProbs_a = logProbs.accessor<scalar_t, 3>();
+
+  // 获取targets的访问器，用于直接访问目标序列元素
   auto targets_a = targets.accessor<target_t, 2>();
+
+  // 获取paths的访问器，用于直接访问解码路径序列元素
   auto paths_a = paths.accessor<target_t, 2>();
+
+  // 获取alphas的访问器，用于直接访问前向变量元素
   auto alphas_a = alphas.accessor<scalar_t, 2>();
+
+  // 获取backPtr的访问器，用于直接访问回溯指针元素
   auto backPtr_a = backPtr.accessor<int8_t, 2>();
+
+  // 初始化变量R，用于后续计算中的累计值或计数器
   auto R = 0;
   for (auto i = 1; i < L; i++) {
     if (targets_a[batchIndex][i] == targets_a[batchIndex][i - 1]) {
@@ -99,23 +113,18 @@ void forced_align_impl(
           targets_a[batchIndex][i / 2] != targets_a[batchIndex][i / 2 - 1]) {
         x2 = alphas_a[prevIdxOffset][i - 2];
       }
-      scalar_t result = kNegInfinity;  // 初始化为负无穷大而不是0
+      scalar_t result = 0.0;
       if (x2 > x1 && x2 > x0) {
         result = x2;
         backPtr_a[t][i] = 2;
       } else if (x1 > x0 && x1 > x2) {
         result = x1;
         backPtr_a[t][i] = 1;
-      } else if (x0 > kNegInfinity) {  // 只有当x0不是负无穷大时才使用它
+      } else {
         result = x0;
         backPtr_a[t][i] = 0;
       }
-      // 如果所有路径都是负无穷大，保持result为负无穷大
-      if (result > kNegInfinity) {
-        alphas_a[curIdxOffset][i] = result + logProbs_a[batchIndex][t][labelIdx];
-      } else {
-        alphas_a[curIdxOffset][i] = kNegInfinity;
-      }
+      alphas_a[curIdxOffset][i] = result + logProbs_a[batchIndex][t][labelIdx];
     }
   }
   auto idx1 = (T - 1) % 2;
@@ -180,9 +189,6 @@ std::tuple<torch::Tensor, torch::Tensor> compute(
   auto paths = torch::zeros(
       {B, T},
       torch::TensorOptions().device(targets.device()).dtype(targets.dtype()));
-  auto scores = torch::zeros(
-      {B, T},
-      torch::TensorOptions().device(logProbs.device()).dtype(logProbs.dtype()));
   AT_DISPATCH_FLOATING_TYPES_AND_HALF(
       logProbs.scalar_type(), "forced_align_impl", [&] {
         if (targets.scalar_type() == torch::kInt64) {

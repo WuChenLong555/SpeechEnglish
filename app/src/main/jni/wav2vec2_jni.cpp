@@ -12,9 +12,10 @@
 #define TAG "Wav2Vec2"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
 
 class Wav2Vec2 {
-private:
+public:
     ncnn::Net net;
     ncnn::VulkanDevice* vkdev;
     bool initialized = false;
@@ -52,7 +53,7 @@ private:
         for (int i = 0; i < length; i++) {
             max_val = std::max(max_val, std::abs(audioData[i]));
         }
-        
+
         LOGI("Audio normalization: max amplitude=%f", max_val);
         
         // 执行归一化
@@ -77,7 +78,7 @@ private:
             std::copy(normalized.begin(), normalized.end(), padded.begin());
             return padded;
         }
-        
+
         LOGI("Audio processing complete: %d samples", normalized.size());
         return normalized;
     }
@@ -97,7 +98,6 @@ private:
         return true;
     }
 
-public:
     Wav2Vec2() : vkdev(nullptr) {}
 
     ~Wav2Vec2() {
@@ -291,21 +291,50 @@ public:
             return nullptr;
         }
 
+        LOGI("Starting force alignment with %zu targets", targets.size());
+
+        // 检查目标序列的有效性
+        for (size_t i = 0; i < targets.size(); i++) {
+            if (targets[i] < 0 || targets[i] >= wav2vec2::OutputConfig::NUM_TOKENS) {
+                LOGE("Invalid target token at position %zu: %d", i, targets[i]);
+                return nullptr;
+            }
+        }
+
+        // 使用pad token (id=0)作为blank token
+        const int blank_token = 0;
+        LOGI("Using pad token as blank token, id: %d", blank_token);
+
         speech::alignment::AlignmentResult alignment = 
-            speech::alignment::ForceAligner::align(lastOutput, targets);
+            speech::alignment::ForceAligner::align(lastOutput, targets, blank_token);
         
         if (alignment.empty()) {
             LOGE("Force alignment failed");
             return nullptr;
         }
+
+        LOGI("Force alignment completed, got %zu frames", alignment.size());
         
-        // 将对齐结果转换为浮点数组
-        float* result = new float[alignment.size() * 2];
-        for (size_t i = 0; i < alignment.size(); i++) {
-            result[i * 2] = static_cast<float>(alignment.paths[i]);
-            result[i * 2 + 1] = alignment.scores[i];
+        // 分配结果数组：每帧包含token_id和其概率
+        float* result = new(std::nothrow) float[alignment.size() * 2];
+        if (!result) {
+            LOGE("Failed to allocate memory for alignment result");
+            return nullptr;
         }
-        
+
+        // 复制对齐结果
+        for (size_t i = 0; i < alignment.size(); i++) {
+            result[i * 2] = static_cast<float>(alignment.paths[i]);     // token_id
+            result[i * 2 + 1] = alignment.scores[i];                    // probability
+            
+            // 验证结果
+            if (std::isnan(result[i * 2 + 1]) || std::isinf(result[i * 2 + 1])) {
+                LOGE("Invalid probability at frame %zu: %f", i, result[i * 2 + 1]);
+                result[i * 2 + 1] = 0.0f;  // 将无效概率设为0
+            }
+        }
+
+        LOGI("Alignment result prepared with %zu frames", alignment.size());
         return result;
     }
 
@@ -322,6 +351,51 @@ public:
             initialized = false;
             useGPU = false;
         }
+    }
+
+    bool isInitialized() const {
+        return initialized;
+    }
+
+    int preprocessAudio(const ncnn::Mat& audioMat, ncnn::Mat& preprocessed) {
+        if (audioMat.empty()) {
+            LOGE("Input audio Mat is empty");
+            return -1;
+        }
+
+        // 检查音频数据是否为单通道
+        if (audioMat.c != 1) {
+            LOGE("Input audio Mat must be single channel");
+            return -1;
+        }
+
+        // 检查音频数据是否为16kHz采样率
+        if (audioMat.w != FRAME_LENGTH) {
+            LOGE("Input audio Mat must be %d samples long", FRAME_LENGTH);
+            return -1;
+        }
+
+        // 检查音频数据是否为单精度浮点数
+        if (audioMat.elemsize != sizeof(float)) {
+            LOGE("Input audio Mat must be float32 format");
+            return -1;
+        }
+
+        // 执行音频预处理
+        std::vector<float> processed = preprocessAudio((const float*)audioMat.data, audioMat.h);
+        if (processed.empty()) {
+            LOGE("Audio preprocessing failed");
+            return -1;
+        }
+
+        // 将处理后的音频数据转换为ncnn::Mat
+        preprocessed = ncnn::Mat(processed.size(), processed.data(), sizeof(float), 1);
+        if (preprocessed.empty()) {
+            LOGE("Failed to create preprocessed Mat");
+            return -1;
+        }
+
+        return 0;
     }
 };
 
@@ -388,42 +462,93 @@ Java_com_example_speechenglish_Wav2Vec2_process(
 
 JNIEXPORT jfloatArray JNICALL
 Java_com_example_speechenglish_Wav2Vec2_forceAlign(
-    JNIEnv* env, jobject thiz, jlong handle, jintArray targetSequence) {
+    JNIEnv* env, jobject thiz, jlong native_handle, jfloatArray audio_data, jintArray target_sequence) {
     
-    Wav2Vec2* wav2vec2 = reinterpret_cast<Wav2Vec2*>(handle);
-    if (!wav2vec2) {
-        LOGE("Invalid handle");
+    LOGD("Starting force alignment...");
+    if (native_handle == 0) {
+        LOGE("Native handle is null");
         return nullptr;
     }
 
-    if (targetSequence == nullptr) {
-        LOGE("Target sequence is null");
+    Wav2Vec2* wav2vec2 = reinterpret_cast<Wav2Vec2*>(native_handle);
+    if (!wav2vec2->isInitialized()) {
+        LOGE("Wav2Vec2 is not initialized");
         return nullptr;
     }
 
-    jsize targetLength = env->GetArrayLength(targetSequence);
-    jint* targetData = env->GetIntArrayElements(targetSequence, nullptr);
-    if (!targetData) {
-        LOGE("Failed to get target sequence data");
-        return nullptr;
-    }
+    // 获取音频数据
+    jfloat* audio = env->GetFloatArrayElements(audio_data, nullptr);
+    jsize audio_length = env->GetArrayLength(audio_data);
+    
+    // 获取目标序列
+    jint* targets = env->GetIntArrayElements(target_sequence, nullptr);
+    jsize target_length = env->GetArrayLength(target_sequence);
 
-    std::vector<int> targets(targetData, targetData + targetLength);
-    env->ReleaseIntArrayElements(targetSequence, targetData, JNI_ABORT);
+    // 创建目标序列向量
+    std::vector<int> target_vec(targets, targets + target_length);
 
-    float* result = wav2vec2->forceAlign(targets);
+    // 处理音频数据
+    float* result = wav2vec2->process(audio, audio_length);
     if (!result) {
-        LOGE("Force alignment failed");
+        LOGE("Failed to process audio data");
+        env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+        env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
         return nullptr;
     }
 
-    jfloatArray resultArray = env->NewFloatArray(targetLength * 2);
-    if (resultArray) {
-        env->SetFloatArrayRegion(resultArray, 0, targetLength * 2, result);
+    // 获取最后的输出特征
+    const ncnn::Mat& features = wav2vec2->getLastOutput();
+    if (features.empty()) {
+        LOGE("No features available");
+        delete[] result;
+        env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+        env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
+        return nullptr;
     }
 
+    // 执行强制对齐
+    speech::alignment::AlignmentResult alignment = 
+        speech::alignment::ForceAligner::align(features, target_vec, 0);
+
+    if (alignment.empty()) {
+        LOGE("Force alignment failed");
+        delete[] result;
+        env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+        env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
+        return nullptr;
+    }
+
+    // 创建结果数组
+    int num_frames = features.h;
+    jfloatArray result_array = env->NewFloatArray(num_frames * 2);
+    if (!result_array) {
+        LOGE("Failed to create result array");
+        delete[] result;
+        env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+        env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
+        return nullptr;
+    }
+
+    // 复制paths和scores到结果数组
+    std::vector<float> combined_result(num_frames * 2);
+    
+    // 复制paths
+    for (int i = 0; i < num_frames; i++) {
+        combined_result[i] = static_cast<float>(alignment.paths[i]);
+    }
+    // 复制scores
+    for (int i = 0; i < num_frames; i++) {
+        combined_result[i + num_frames] = alignment.scores[i];
+    }
+
+    env->SetFloatArrayRegion(result_array, 0, num_frames * 2, combined_result.data());
+
+    // 释放资源
     delete[] result;
-    return resultArray;
+    env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+    env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
+
+    return result_array;
 }
 
 JNIEXPORT void JNICALL

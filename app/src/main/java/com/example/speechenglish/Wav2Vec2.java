@@ -21,6 +21,7 @@ public class Wav2Vec2 {
     private static final float THRESHOLD = 0.5f;  // 输出阈值
     private boolean isInitialized = false;
     private Context context;
+    private PhonemeMapper phonemeMapper;
     private static final int MAX_AUDIO_LENGTH = 1600000; // 约100秒的16kHz音频
     private static final String BLANK_TOKEN = "<blank>";  // CTC空白标记
     private static final float LOG_THRESHOLD = -15.0f;  // 对数概率阈值
@@ -48,9 +49,14 @@ public class Wav2Vec2 {
                 throw new RuntimeException("必需的权限未授予，无法初始化");
             }
 
-            // 先加载词表
-            loadTokens(context.getAssets());
-            Log.i(TAG, "Tokens loaded successfully, count: " + (tokens != null ? tokens.length : 0));
+            // 初始化音素映射器
+            try {
+                phonemeMapper = new PhonemeMapper(context.getAssets());
+                Log.i(TAG, "PhonemeMapper initialized successfully");
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to initialize PhonemeMapper", e);
+                throw new RuntimeException("Failed to initialize PhonemeMapper", e);
+            }
             
             // 初始化本地库
             Log.i(TAG, "开始初始化本地库...");
@@ -108,36 +114,36 @@ public class Wav2Vec2 {
         return true;
     }
 
-    private void loadTokens(AssetManager assetManager) {
-        BufferedReader reader = null;
-        try {
-            reader = new BufferedReader(
-                new InputStreamReader(assetManager.open("model_tokens.txt")));
-            List<String> tokenList = new ArrayList<>();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.isEmpty()) {
-                    String[] parts = line.split("\t");
-                    if (parts.length >= 2) {
-                        tokenList.add(parts[1]);
-                    }
-                }
-            }
-            tokens = tokenList.toArray(new String[0]);
-            Log.d(TAG, "Loaded " + tokens.length + " tokens");
-        } catch (IOException e) {
-            Log.e(TAG, "Error loading tokens: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (IOException e) {
-                    Log.e(TAG, "Error closing reader: " + e.getMessage());
-                }
-            }
-        }
-    }
+//    private void loadTokens(AssetManager assetManager) {
+//        BufferedReader reader = null;
+//        try {
+//            reader = new BufferedReader(
+//                new InputStreamReader(assetManager.open("model_tokens.txt")));
+//            List<String> tokenList = new ArrayList<>();
+//            String line;
+//            while ((line = reader.readLine()) != null) {
+//                if (!line.isEmpty()) {
+//                    String[] parts = line.split("\t");
+//                    if (parts.length >= 2) {
+//                        tokenList.add(parts[1]);
+//                    }
+//                }
+//            }
+//            tokens = tokenList.toArray(new String[0]);
+//            Log.d(TAG, "Loaded " + tokens.length + " tokens");
+//        } catch (IOException e) {
+//            Log.e(TAG, "Error loading tokens: " + e.getMessage());
+//            e.printStackTrace();
+//        } finally {
+//            if (reader != null) {
+//                try {
+//                    reader.close();
+//                } catch (IOException e) {
+//                    Log.e(TAG, "Error closing reader: " + e.getMessage());
+//                }
+//            }
+//        }
+//    }
 
     public String[] processAndDecode(float[] audioData) {
         if (audioData == null || audioData.length == 0) {
@@ -229,16 +235,20 @@ public class Wav2Vec2 {
                 return null;
             }
 
-            // 验证输出维度是否为NUM_TOKENS的整数倍
-            if (logits.length % tokens.length != 0) {
+            // 获取音素数量
+            String[] allPhonemes = phonemeMapper.getAllPhonemes();
+            int numPhonemes = allPhonemes.length;
+
+            // 验证输出维度是否为音素数量的整数倍
+            if (logits.length % numPhonemes != 0) {
                 Log.e(TAG, String.format("输出维度异常: %d 不是音素数量 %d 的整数倍", 
-                    logits.length, tokens.length));
+                    logits.length, numPhonemes));
                 return null;
             }
 
-            int timeSteps = logits.length / tokens.length;
+            int timeSteps = logits.length / numPhonemes;
             Log.i(TAG, String.format("音频处理成功完成: %d个时间步 × %d个音素 = %d个logits", 
-                timeSteps, tokens.length, logits.length));
+                timeSteps, numPhonemes, logits.length));
 
             return logits;
         } catch (Exception e) {
@@ -249,18 +259,22 @@ public class Wav2Vec2 {
     }
 
     public String[] decode(float[] logits) {
-        if (logits == null || tokens == null || tokens.length == 0) {
-            Log.e(TAG, "logits或tokens为空");
+        if (logits == null) {
+            Log.e(TAG, "logits为空");
             return null;
         }
+
+        // 获取音素数量
+        String[] allPhonemes = phonemeMapper.getAllPhonemes();
+        int numPhonemes = allPhonemes.length;
 
         // 检查logits的维度是否正确
-        if (logits.length % tokens.length != 0) {
-            Log.e(TAG, "logits维度与tokens数量不匹配");
+        if (logits.length % numPhonemes != 0) {
+            Log.e(TAG, "logits维度与音素数量不匹配");
             return null;
         }
 
-        int timeSteps = logits.length / tokens.length;
+        int timeSteps = logits.length / numPhonemes;
         List<String> result = new ArrayList<>();
         String prevToken = null;  // 用于跟踪前一个token
 
@@ -269,14 +283,14 @@ public class Wav2Vec2 {
 
             // 对每个时间步进行解码
             for (int t = 0; t < timeSteps; t++) {
-                int startIdx = t * tokens.length;
+                int startIdx = t * numPhonemes;
                 
                 // 找出当前时间步的最大对数概率及其索引
                 float maxLogit = Float.NEGATIVE_INFINITY;
                 int maxIndex = -1;
                 
                 // 首先找出最大值
-                for (int i = 0; i < tokens.length; i++) {
+                for (int i = 0; i < numPhonemes; i++) {
                     float logit = logits[startIdx + i];
                     if (!Float.isNaN(logit) && !Float.isInfinite(logit) && logit > maxLogit) {
                         maxLogit = logit;
@@ -291,7 +305,7 @@ public class Wav2Vec2 {
 
                 // 检查是否有其他token的概率接近最大值
                 boolean hasCloseCompetitor = false;
-                for (int i = 0; i < tokens.length; i++) {
+                for (int i = 0; i < numPhonemes; i++) {
                     if (i != maxIndex) {
                         float logit = logits[startIdx + i];
                         if (!Float.isNaN(logit) && !Float.isInfinite(logit) && 
@@ -308,14 +322,14 @@ public class Wav2Vec2 {
                 }
 
                 // 应用CTC解码规则
-                if (maxIndex >= 0 && maxIndex < tokens.length) {
-                    String currentToken = tokens[maxIndex];
+                if (maxIndex >= 0 && maxIndex < numPhonemes) {
+                    String currentToken = phonemeMapper.getPhoneme(maxIndex);
                     
                     // CTC解码规则：
                     // 1. 跳过空白标记
                     // 2. 合并重复的连续标记
                     // 3. 保留非重复的有效标记
-                    if (!currentToken.equals(BLANK_TOKEN)) {  // 规则1
+                    if (currentToken != null && !currentToken.equals(BLANK_TOKEN)) {  // 规则1
                         if (!currentToken.equals(prevToken)) {  // 规则2
                             result.add(currentToken);  // 规则3
                             prevToken = currentToken;
@@ -429,4 +443,124 @@ public class Wav2Vec2 {
     private native long init(android.content.res.AssetManager assetManager);
     private native float[] process(long handle, float[] audioData);
     private native void destroy(long handle);
+
+    private native float[] forceAlign(long handle, float[] audioData, int[] targetSequence);
+
+    /**
+     * 强制对齐的结果
+     */
+    public static class AlignmentResult {
+        public final int[] paths;          // 每个时间步的音素ID
+        public final float[] timePoints;   // 每个时间步的时间点
+
+        public AlignmentResult(int[] paths, float[] timePoints) {
+            this.paths = paths;
+            this.timePoints = timePoints;
+        }
+    }
+
+    public AlignmentResult processAndForceAlign(float[] audioData, int[] targetSequence) {
+        if (!isInitialized()) {
+            Log.e(TAG, "Wav2Vec2 is not initialized");
+            return null;
+        }
+
+        if (audioData == null || audioData.length == 0) {
+            Log.e(TAG, "Audio data is null or empty");
+            return null;
+        }
+
+        if (targetSequence == null || targetSequence.length == 0) {
+            Log.e(TAG, "Target sequence is null or empty");
+            return null;
+        }
+
+        try {
+            float[] result = forceAlign(nativeHandle, audioData, targetSequence);
+            if (result == null) {
+                Log.e(TAG, "Force alignment failed");
+                return null;
+            }
+
+            // 结果数组的前半部分是paths，后半部分是时间点
+            int halfLength = result.length / 2;
+            int[] paths = new int[halfLength];
+            float[] timePoints = new float[halfLength];
+
+            // 分离paths和时间点
+            for (int i = 0; i < halfLength; i++) {
+                paths[i] = (int) result[i];
+                timePoints[i] = result[i + halfLength];
+            }
+
+            return new AlignmentResult(paths, timePoints);
+        } catch (Exception e) {
+            Log.e(TAG, "Error in force alignment", e);
+            return null;
+        }
+    }
+
+    /**
+     * 使用音素序列进行强制对齐
+     * @param audioData 音频数据
+     * @param phonemes 音素序列
+     * @return 对齐结果
+     */
+    public AlignmentResult forceAlignPhonemes(float[] audioData, String[] phonemes) {
+        if (phonemes == null || phonemes.length == 0) {
+            Log.e(TAG, "音素序列为空");
+            return null;
+        }
+
+        // 将音素序列转换为索引序列
+        int[] indices = phonemeMapper.phonemesToIndices(phonemes);
+        if (indices == null) {
+            Log.e(TAG, "音素序列转换失败");
+            return null;
+        }
+
+        return processAndForceAlign(audioData, indices);
+    }
+
+    /**
+     * 使用文本进行强制对齐
+     * @param audioData 音频数据
+     * @param text 文本
+     * @return 对齐结果
+     */
+    public AlignmentResult forceAlignText(float[] audioData, String text) {
+        if (text == null || text.isEmpty()) {
+            Log.e(TAG, "输入文本为空");
+            return null;
+        }
+
+        // 将文本转换为音素序列
+        String[] phonemes = phonemeMapper.textToPhonemes(text);
+        if (phonemes == null) {
+            Log.e(TAG, "文本转音素失败");
+            return null;
+        }
+
+        return forceAlignPhonemes(audioData, phonemes);
+    }
+
+    /**
+     * 获取音素映射器实例
+     * @return PhonemeMapper实例
+     */
+    public PhonemeMapper getPhonemeMapper() {
+        return phonemeMapper;
+    }
+
+    /**
+     * 进行强制对齐测试
+     * 测试音素序列: t ɑː m ɡ ɪ v z ʌ p b ɑː k s ɪ ŋ
+     * @param audioData 音频数据
+     * @return 对齐结果
+     */
+    public AlignmentResult testForceAlignment(float[] audioData) {
+        // 使用音素序列进行测试
+        String[] phonemes = {"t", "ɑː", "m", "ɡ", "ɪ", "v", "z", "ʌ", "p", "b", "ɑː", "k", "s", "ɪ", "ŋ"};
+        return forceAlignPhonemes(audioData, phonemes);
+    }
 } 

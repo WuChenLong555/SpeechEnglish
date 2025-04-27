@@ -387,68 +387,168 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void runTest() {
-        showProgress(true);
-        updateStatus("正在加载音频文件...");
+    private void showResult(String text) {
+        mainHandler.post(() -> resultTextView.setText(text));
+    }
+
+//    private void showAlignmentResult(float[] alignmentResult) {
+//        if (alignmentResult == null || alignmentResult.length == 0) {
+//            showResult("强制对齐失败");
+//            return;
+//        }
+//
+//        StringBuilder resultBuilder = new StringBuilder();
+//        resultBuilder.append("强制对齐结果:\n\n");
+//        resultBuilder.append(String.format("%-10s %-10s %-10s\n", "音素", "时间(秒)", "概率"));
+//        resultBuilder.append("--------------------------------\n");
+//
+//        // 数组前半部分是token id，后半部分是对应的时间点
+//        int halfLength = alignmentResult.length / 2;
+//        PhonemeMapper mapper = wav2Vec2.getPhonemeMapper();
+//
+//        for (int i = 0; i < halfLength; i++) {
+//            int tokenId = (int) alignmentResult[i];
+//            float timePoint = alignmentResult[i + halfLength];
+//
+//            // 使用PhonemeMapper获取音素
+//            String phoneme = mapper.getPhoneme(tokenId);
+//
+//            resultBuilder.append(String.format("%-10s %-10.3f %-10.3f\n",
+//                phoneme,           // 音素
+//                timePoint,         // 时间点
+//                Math.exp(timePoint) // 将对数概率转换为概率
+//            ));
+//        }
+//
+//        showResult(resultBuilder.toString());
+//    }
+
+    private void showCombinedResult(String[] decodedPhonemes, Wav2Vec2.AlignmentResult alignmentResult) {
+        StringBuilder result = new StringBuilder();
         
+        // 显示识别到的音素
+        result.append("识别到的音素：\n\n");
+        if (decodedPhonemes != null && decodedPhonemes.length > 0) {
+            // 每行显示10个音素
+            for (int i = 0; i < decodedPhonemes.length; i++) {
+                result.append(decodedPhonemes[i]);
+                if ((i + 1) % 10 == 0) {
+                    result.append("\n");
+                } else {
+                    result.append(" ");
+                }
+            }
+            result.append("\n\n总音素数: ").append(decodedPhonemes.length).append("\n");
+        } else {
+            result.append("音素识别失败\n");
+        }
+
+        // 显示强制对齐结果
+        result.append("\n强制对齐结果：\n\n");
+        if (alignmentResult != null && alignmentResult.paths != null && alignmentResult.timePoints != null) {
+            // 获取PhonemeMapper实例
+            PhonemeMapper mapper = wav2Vec2.getPhonemeMapper();
+            
+            // 显示表头
+            result.append(String.format("%-4s  %-10s  %-10s\n", "音素", "时间(秒)", "概率"));
+            result.append("------------------------------------------------\n");
+            
+            // 计算时间步长（假设采样率为16kHz，帧移为320个样本）
+            final float FRAME_SHIFT_MS = 20.0f;  // 20ms per frame
+            final float FRAME_SHIFT_S = FRAME_SHIFT_MS / 1000.0f;  // 转换为秒
+            
+            // 显示每个音素的时间点和概率
+            for (int i = 0; i < alignmentResult.paths.length; i++) {
+                int tokenId = alignmentResult.paths[i];
+                float logProb = alignmentResult.timePoints[i];
+                
+                // 正确计算概率值：logProb本身就是对数概率，直接取exp即可
+                float probability = (float) Math.exp(logProb);
+                // 确保概率值在0到1之间
+                probability = Math.max(0.0f, Math.min(1.0f, probability));
+                
+                // 计算实际时间（秒）
+                float timeInSeconds = i * FRAME_SHIFT_S;
+                
+                // 获取音素名称
+                String phoneme = mapper.getPhoneme(tokenId);
+                if (phoneme == null) {
+                    phoneme = "???";
+                }
+                
+                // 显示所有音素，包括空白音素
+                result.append(String.format("%-4s  %-10.3f  %-10.3f\n", 
+                    phoneme,           // 音素
+                    timeInSeconds,     // 开始时间（秒）
+                    probability        // 概率值
+                ));
+            }
+            
+            result.append("\n注：时间基于帧移" + FRAME_SHIFT_MS + "ms计算\n");
+        } else {
+            result.append("强制对齐失败\n");
+        }
+
+        showResult(result.toString());
+    }
+
+    private String getConfidenceLevel(float probability) {
+        if (probability >= 0.8f) {
+            return "高";
+        } else if (probability >= 0.5f) {
+            return "中";
+        } else {
+            return "低";
+        }
+    }
+
+    private void runTest() {
+        if (!isInitialized()) {
+            updateStatus("请等待初始化完成");
+            return;
+        }
+
         new Thread(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                // 读取WAV文件
+                showProgress(true);
+                updateStatus("正在加载测试音频...");
+                
                 float[] audioData = loadWavFile(TEST_WAV);
                 if (audioData == null) {
-                    throw new IOException("无法加载音频文件");
-                }
-
-                updateStatus("正在处理音频...");
-                
-                // 检查Wav2Vec2实例是否正确初始化
-                if (wav2Vec2 == null) {
-                    throw new IllegalStateException("Wav2Vec2实例未初始化");
+                    updateStatus("加载测试音频失败");
+                    return;
                 }
                 
-                // 处理音频并解码为音素
+                // 进行音素识别
+                updateStatus("正在进行音素识别...");
                 String[] phonemes = wav2Vec2.processAndDecode(audioData);
-                if (phonemes == null) {
-                    throw new RuntimeException("音频处理失败");
-                }
-
-                // 显示结果
-                StringBuilder sb = new StringBuilder();
-                sb.append("识别到的音素：\n\n");
                 
-                // 每行显示10个音素
-                for (int i = 0; i < phonemes.length; i++) {
-                    sb.append(phonemes[i]);
-                    if ((i + 1) % 10 == 0) {
-                        sb.append("\n");
-                    } else {
-                        sb.append(" ");
-                    }
-                }
+                // 进行强制对齐
+                updateStatus("正在进行强制对齐...");
+                Wav2Vec2.AlignmentResult alignmentResult = wav2Vec2.testForceAlignment(audioData);
                 
-                sb.append("\n\n总音素数: ").append(phonemes.length);
-                showResult(sb.toString());
-                updateStatus("处理完成");
+                // 显示组合结果
+                if (phonemes != null || alignmentResult != null) {
+                    updateStatus("处理完成");
+                    showCombinedResult(phonemes, alignmentResult);
+                } else {
+                    updateStatus("处理失败");
+                    showResult("音素识别和强制对齐均失败，请查看日志了解详细信息");
+                }
                 
             } catch (Exception e) {
-                String errorMsg = "错误: " + e.getMessage();
-                Log.e(TAG, errorMsg, e);
-                // 提供更详细的错误信息
-                StringBuilder detailedError = new StringBuilder();
-                detailedError.append(errorMsg).append("\n\n");
-                
-                // 添加异常的堆栈跟踪
-                StackTraceElement[] stackTrace = e.getStackTrace();
-                for (int i = 0; i < Math.min(5, stackTrace.length); i++) {
-                    detailedError.append(stackTrace[i].toString()).append("\n");
-                }
-                
-                showResult(detailedError.toString());
-                updateStatus("处理失败");
+                Log.e(TAG, "测试过程发生错误", e);
+                updateStatus("测试失败: " + e.getMessage());
+                showResult("发生错误：" + e.getMessage());
             } finally {
                 showProgress(false);
             }
         }).start();
+    }
+
+    private boolean isInitialized() {
+        return wav2Vec2 != null && wav2Vec2.isInitialized();
     }
 
     private float[] loadWavFile(String filename) throws IOException {
@@ -614,10 +714,6 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "验证WAV文件头时出错", e);
             return false;
         }
-    }
-
-    private void showResult(String text) {
-        mainHandler.post(() -> resultTextView.setText(text));
     }
 
     @Override

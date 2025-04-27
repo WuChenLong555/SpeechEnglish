@@ -23,11 +23,9 @@ struct AlignmentResult {
 class ForceAligner {
 public:
     // 执行强制对齐
-    static AlignmentResult align(
-        const ncnn::Mat& logits,      // 模型输出的logits
-        const std::vector<int>& targets,  // 目标音素序列
-        int blank_idx = 0              // blank标签的索引
-    );
+    static AlignmentResult align(const ncnn::Mat& features, 
+                               const std::vector<int>& targets,
+                               int blank_token);
 
 private:
     // 内部实现细节
