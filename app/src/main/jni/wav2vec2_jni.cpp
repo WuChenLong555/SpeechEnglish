@@ -8,12 +8,16 @@
 #include <cmath>
 #include "wav2vec2_model.h"
 #include "force_aligner.h"
-
+#include <sys/time.h>
 #define TAG "Wav2Vec2"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
-
+double getCurrentTime() {
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0; // 返回毫秒时间戳
+}
 class Wav2Vec2 {
 public:
     ncnn::Net net;
@@ -224,13 +228,16 @@ public:
         }
         
         LOGI("Preprocessed audio data: length=%zu samples", processed.size());
-
+        // 记录开始时间
+        double startTime = getCurrentTime();
         // 创建推理器
         ncnn::Extractor ex = net.create_extractor();
         if (useGPU) {
             ex.set_vulkan_compute(true);
         }
-        
+
+
+
         // 创建输入Mat
         ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
         if (in.empty()) {
@@ -245,11 +252,16 @@ public:
             LOGE("Failed to set input: %d", ret);
             return nullptr;
         }
-        
+        // 记录结束时间
+
+
         if(int ret = ex.extract(wav2vec2::OUTPUT_LAYER, lastOutput)) {
             LOGE("Failed to extract output: %d", ret);
             return nullptr;
         }
+        double endTime = getCurrentTime();
+        double inferenceTimeMs = endTime - startTime;
+        LOGI("Inference completed in %.2f ms", inferenceTimeMs);
 
         LOGI("Inference completed: output dimensions = [%d, %d, %d, %d]", 
             lastOutput.w, lastOutput.h, lastOutput.c, lastOutput.dims);
