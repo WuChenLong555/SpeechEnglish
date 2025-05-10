@@ -18,21 +18,46 @@ endif()
 
 find_package(ncnn REQUIRED)
 
-# 添加源文件
-set(SOURCES
+# 添加wav2vec2源文件
+set(WAV2VEC2_SOURCES
     wav2vec2_jni.cpp
     vulkan_manager.cpp
     force_aligner.cpp
 )
 
-# 创建共享库
+# 添加特征提取源文件
+set(FEATURE_SOURCES
+    feature_extractor.h
+    energy_extractor.h
+    energy_extractor.cpp
+    pitch_extractor.h
+    pitch_extractor.cpp
+    spectral_extractor.h
+    spectral_extractor.cpp
+    feature_manager.h
+    feature_manager.cpp
+    feature_jni.cpp
+    kiss_fft.h
+    kiss_fft.c
+)
+
+# 创建wav2vec2共享库
 add_library(wav2vec2 SHARED
-    ${SOURCES}
+    ${WAV2VEC2_SOURCES}
+)
+
+# 创建特征提取共享库
+add_library(speech_features SHARED
+    ${FEATURE_SOURCES}
 )
 
 # 设置包含目录 - 修正包含路径
 target_include_directories(wav2vec2 PRIVATE
     ${CMAKE_SOURCE_DIR}/ncnn-20241226-android-vulkan/${ANDROID_ABI}/include/ncnn
+    ${CMAKE_SOURCE_DIR}  # 添加当前目录到包含路径
+)
+
+target_include_directories(speech_features PRIVATE
     ${CMAKE_SOURCE_DIR}  # 添加当前目录到包含路径
 )
 
@@ -42,4 +67,9 @@ target_link_libraries(wav2vec2
     android
     log
     vulkan
+)
+
+target_link_libraries(speech_features
+    android
+    log
 ) 
