@@ -117,6 +117,8 @@ Java_com_example_speechenglish_FeatureExtractor_nativeSetThresholds(
     JNIEnv* env, jobject /* this */,
     jfloat energy_threshold,
     jfloat silence_ratio_threshold,
+    jfloat energy_slope_threshold,
+    jfloat energy_acceleration_threshold,
     jfloat pitch_slope_threshold,
     jfloat spectral_flux_threshold,
     jfloat formant_fitness_threshold) {
@@ -129,6 +131,8 @@ Java_com_example_speechenglish_FeatureExtractor_nativeSetThresholds(
     g_feature_manager->setThresholds(
         energy_threshold,
         silence_ratio_threshold,
+        energy_slope_threshold,
+        energy_acceleration_threshold,
         pitch_slope_threshold,
         spectral_flux_threshold,
         formant_fitness_threshold

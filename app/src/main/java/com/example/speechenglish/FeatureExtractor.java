@@ -77,6 +77,8 @@ public class FeatureExtractor {
      * 设置连读判断阈值
      * @param energyThreshold 能量阈值
      * @param silenceRatioThreshold 静默比例阈值
+     * @param energySlopeThreshold 能量斜率阈值
+     * @param energyAccelerationThreshold 能量加速度阈值
      * @param pitchSlopeThreshold 基频斜率阈值
      * @param spectralFluxThreshold 谱流量阈值
      * @param formantFitnessThreshold 共振峰拟合优度阈值
@@ -84,6 +86,8 @@ public class FeatureExtractor {
     public native void nativeSetThresholds(
             float energyThreshold,
             float silenceRatioThreshold,
+            float energySlopeThreshold,
+            float energyAccelerationThreshold,
             float pitchSlopeThreshold,
             float spectralFluxThreshold,
             float formantFitnessThreshold);
@@ -104,9 +108,9 @@ public class FeatureExtractor {
      * @return 是否初始化成功
      */
     public boolean init(int sampleRate) {
-        // 默认使用25ms帧长，10ms帧移
+        // 默认使用25ms帧长，20ms帧移
         int frameSize = nextPowerOf2((int)(sampleRate * 0.025f));
-        int hopLength = (int)(sampleRate * 0.010f);
+        int hopLength = (int)(sampleRate * 0.020f);
         return nativeInit(sampleRate, frameSize, hopLength);
     }
     
@@ -127,7 +131,7 @@ public class FeatureExtractor {
      * 便捷方法：设置默认阈值
      */
     public void setDefaultThresholds() {
-        nativeSetThresholds(0.01f, 0.2f, 10.0f, 0.5f, 0.6f);
+        nativeSetThresholds(0.01f, 0.2f, 0.05f, 0.02f, 10.0f, 0.5f, 0.6f);
     }
     
     /**

@@ -93,6 +93,13 @@ public class MainActivity extends AppCompatActivity {
         testButton = findViewById(R.id.test_button);
         
         testButton.setOnClickListener(v -> runTest());
+
+        // 初始化连读测试按钮
+        Button phonemeTestButton = findViewById(R.id.phoneme_test_button);
+        phonemeTestButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, PhonemeTestActivity.class);
+            startActivity(intent);
+        });
     }
 
     private void showProgress(boolean show) {

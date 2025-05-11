@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# SpecStory explanation file
+.specstory/.what-is-this.md

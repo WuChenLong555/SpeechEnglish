@@ -13,11 +13,13 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
+
 double getCurrentTime() {
     struct timeval tv;
     gettimeofday(&tv, nullptr);
     return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0; // 返回毫秒时间戳
 }
+
 class Wav2Vec2 {
 public:
     ncnn::Net net;
@@ -350,6 +352,59 @@ public:
         return result;
     }
 
+    float* forceAlignWithFeatures(const ncnn::Mat& features, const std::vector<int>& targets) {
+        if (!initialized) {
+            LOGE("Model not initialized");
+            return nullptr;
+        }
+
+        LOGI("Starting force alignment with pre-extracted features");
+
+        // 检查目标序列的有效性
+        for (size_t i = 0; i < targets.size(); i++) {
+            if (targets[i] < 0 || targets[i] >= wav2vec2::OutputConfig::NUM_TOKENS) {
+                LOGE("Invalid target token at position %zu: %d", i, targets[i]);
+                return nullptr;
+            }
+        }
+
+        // 使用pad token (id=0)作为blank token
+        const int blank_token = 0;
+        LOGI("Using pad token as blank token, id: %d", blank_token);
+
+        speech::alignment::AlignmentResult alignment = 
+            speech::alignment::ForceAligner::align(features, targets, blank_token);
+        
+        if (alignment.empty()) {
+            LOGE("Force alignment failed");
+            return nullptr;
+        }
+
+        LOGI("Force alignment completed, got %zu frames", alignment.size());
+        
+        // 分配结果数组：每帧包含token_id和其概率
+        float* result = new(std::nothrow) float[alignment.size() * 2];
+        if (!result) {
+            LOGE("Failed to allocate memory for alignment result");
+            return nullptr;
+        }
+
+        // 复制对齐结果
+        for (size_t i = 0; i < alignment.size(); i++) {
+            result[i * 2] = static_cast<float>(alignment.paths[i]);     // token_id
+            result[i * 2 + 1] = alignment.scores[i];                    // probability
+            
+            // 验证结果
+            if (std::isnan(result[i * 2 + 1]) || std::isinf(result[i * 2 + 1])) {
+                LOGE("Invalid probability at frame %zu: %f", i, result[i * 2 + 1]);
+                result[i * 2 + 1] = 0.0f;  // 将无效概率设为0
+            }
+        }
+
+        LOGI("Alignment result prepared with %zu frames", alignment.size());
+        return result;
+    }
+
     const ncnn::Mat& getLastOutput() const {
         return lastOutput;
     }
@@ -410,6 +465,12 @@ public:
         return 0;
     }
 };
+
+// 在类外定义静态常量
+constexpr int Wav2Vec2::SAMPLE_RATE;
+constexpr int Wav2Vec2::FRAME_LENGTH;
+constexpr int Wav2Vec2::FRAME_SHIFT;
+constexpr int Wav2Vec2::FEATURE_DIM;
 
 extern "C" {
 
@@ -561,6 +622,56 @@ Java_com_example_speechenglish_Wav2Vec2_forceAlign(
     env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
 
     return result_array;
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_example_speechenglish_Wav2Vec2_forceAlignWithFeatures(
+    JNIEnv* env, jobject thiz, jlong handle, jfloatArray features, jintArray target_sequence) {
+    
+    LOGD("Starting force alignment with pre-extracted features...");
+    
+    Wav2Vec2* wav2vec2 = reinterpret_cast<Wav2Vec2*>(handle);
+    if (!wav2vec2 || !wav2vec2->isInitialized()) {
+        LOGE("Invalid handle or Wav2Vec2 not initialized");
+        return nullptr;
+    }
+
+    // 获取特征数据
+    jfloat* feature_data = env->GetFloatArrayElements(features, nullptr);
+    jsize feature_length = env->GetArrayLength(features);
+    
+    // 获取目标序列
+    jint* targets = env->GetIntArrayElements(target_sequence, nullptr);
+    jsize target_length = env->GetArrayLength(target_sequence);
+
+    // 创建目标序列向量
+    std::vector<int> target_vec(targets, targets + target_length);
+
+    // 创建特征Mat
+    ncnn::Mat feature_mat(wav2vec2::OutputConfig::NUM_TOKENS, feature_length / wav2vec2::OutputConfig::NUM_TOKENS);
+    memcpy(feature_mat.data, feature_data, feature_length * sizeof(float));
+
+    // 执行强制对齐
+    float* result = wav2vec2->forceAlignWithFeatures(feature_mat, target_vec);
+
+    // 释放JNI资源
+    env->ReleaseFloatArrayElements(features, feature_data, JNI_ABORT);
+    env->ReleaseIntArrayElements(target_sequence, targets, JNI_ABORT);
+
+    if (!result) {
+        LOGE("Force alignment with features failed");
+        return nullptr;
+    }
+
+    // 创建返回数组
+    jsize result_length = feature_length / wav2vec2::OutputConfig::NUM_TOKENS * 2;
+    jfloatArray resultArray = env->NewFloatArray(result_length);
+    if (resultArray) {
+        env->SetFloatArrayRegion(resultArray, 0, result_length, result);
+    }
+
+    delete[] result;
+    return resultArray;
 }
 
 JNIEXPORT void JNICALL

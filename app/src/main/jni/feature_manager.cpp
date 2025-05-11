@@ -70,13 +70,19 @@ bool FeatureManager::isConnectedSpeech() const {
     // 2. 能量足够高（非静默）
     is_connected &= (features.energy > energy_threshold_);
     
-    // 3. 基频变化平缓
+    // 3. 能量变化平缓（新增）
+    is_connected &= (std::abs(features.energy_slope) < energy_slope_threshold_);
+    
+    // 4. 能量加速度小（新增）
+    is_connected &= (std::abs(features.energy_acceleration) < energy_acceleration_threshold_);
+    
+    // 5. 基频变化平缓
     is_connected &= (std::abs(features.pitch_slope) < pitch_slope_threshold_);
     
-    // 4. 频谱变化平缓
+    // 6. 频谱变化平缓
     is_connected &= (features.spectral_flux < spectral_flux_threshold_);
     
-    // 5. 共振峰过渡平滑
+    // 7. 共振峰过渡平滑
     is_connected &= (features.formant_fitness > formant_fitness_threshold_);
     
     FEATURE_LOGI("Connected speech detection: %s", is_connected ? "connected" : "not connected");
@@ -87,19 +93,24 @@ bool FeatureManager::isConnectedSpeech() const {
 void FeatureManager::setThresholds(
     float energy_threshold,
     float silence_ratio_threshold,
+    float energy_slope_threshold,
+    float energy_acceleration_threshold,
     float pitch_slope_threshold,
     float spectral_flux_threshold,
     float formant_fitness_threshold) {
     
     energy_threshold_ = energy_threshold;
     silence_ratio_threshold_ = silence_ratio_threshold;
+    energy_slope_threshold_ = energy_slope_threshold;
+    energy_acceleration_threshold_ = energy_acceleration_threshold;
     pitch_slope_threshold_ = pitch_slope_threshold;
     spectral_flux_threshold_ = spectral_flux_threshold;
     formant_fitness_threshold_ = formant_fitness_threshold;
     
-    FEATURE_LOGI("Thresholds updated: energy=%.4f, silence_ratio=%.4f, pitch_slope=%.4f, "
-                "spectral_flux=%.4f, formant_fitness=%.4f",
-                energy_threshold_, silence_ratio_threshold_, pitch_slope_threshold_,
+    FEATURE_LOGI("Thresholds updated: energy=%.4f, silence_ratio=%.4f, energy_slope=%.4f, "
+                "energy_acceleration=%.4f, pitch_slope=%.4f, spectral_flux=%.4f, formant_fitness=%.4f",
+                energy_threshold_, silence_ratio_threshold_, energy_slope_threshold_,
+                energy_acceleration_threshold_, pitch_slope_threshold_,
                 spectral_flux_threshold_, formant_fitness_threshold_);
 }
 

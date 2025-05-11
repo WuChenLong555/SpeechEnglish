@@ -193,7 +193,7 @@ public class Wav2Vec2 {
         }
     }
 
-    private float[] process(float[] audioData) {
+    public float[] process(float[] audioData) {
         if (!isInitialized) {
             Log.e(TAG, "Wav2Vec2未正确初始化");
             return null;
@@ -444,7 +444,7 @@ public class Wav2Vec2 {
     private native float[] process(long handle, float[] audioData);
     private native void destroy(long handle);
 
-    private native float[] forceAlign(long handle, float[] audioData, int[] targetSequence);
+    public native float[] forceAlign(long handle, float[] audioData, int[] targetSequence);
 
     /**
      * 强制对齐的结果
@@ -563,4 +563,31 @@ public class Wav2Vec2 {
         String[] phonemes = {"t", "ɑː", "m", "ɡ", "ɪ", "v", "z", "ʌ", "p", "b", "ɑː", "k", "s", "ɪ", "ŋ"};
         return forceAlignPhonemes(audioData, phonemes);
     }
+
+    /**
+     * 使用预先提取的特征进行强制对齐
+     * @param features 预先提取的特征
+     * @param targetSequence 目标音素序列
+     * @return 对齐结果数组，每帧包含两个值：音素ID和对应的概率得分
+     */
+    public float[] forceAlignWithFeatures(float[] features, int[] targetSequence) {
+        if (!isInitialized) {
+            Log.e(TAG, "Wav2Vec2 not initialized");
+            return null;
+        }
+
+        if (features == null || features.length == 0) {
+            Log.e(TAG, "Features array is null or empty");
+            return null;
+        }
+
+        if (targetSequence == null || targetSequence.length == 0) {
+            Log.e(TAG, "Target sequence is null or empty");
+            return null;
+        }
+
+        return forceAlignWithFeatures(nativeHandle, features, targetSequence);
+    }
+
+    private native float[] forceAlignWithFeatures(long handle, float[] features, int[] targetSequence);
 } 

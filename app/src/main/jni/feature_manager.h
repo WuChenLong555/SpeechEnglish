@@ -45,6 +45,8 @@ public:
     void setThresholds(
         float energy_threshold = 0.01f,
         float silence_ratio_threshold = 0.2f,
+        float energy_slope_threshold = 0.05f,
+        float energy_acceleration_threshold = 0.02f,
         float pitch_slope_threshold = 10.0f,
         float spectral_flux_threshold = 0.5f,
         float formant_fitness_threshold = 0.6f
@@ -58,6 +60,8 @@ private:
     // 连读判断阈值
     float energy_threshold_ = 0.01f;
     float silence_ratio_threshold_ = 0.2f;
+    float energy_slope_threshold_ = 0.05f;
+    float energy_acceleration_threshold_ = 0.02f;
     float pitch_slope_threshold_ = 10.0f;
     float spectral_flux_threshold_ = 0.5f;
     float formant_fitness_threshold_ = 0.6f;

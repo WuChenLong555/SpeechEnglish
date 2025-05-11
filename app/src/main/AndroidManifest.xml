@@ -70,6 +70,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".PhonemeTestActivity"
+            android:exported="false"
+            android:label="音素测试"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait"/>
+
     </application>
 
 </manifest>

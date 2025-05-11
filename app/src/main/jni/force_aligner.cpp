@@ -134,8 +134,10 @@ AlignmentResult ForceAligner::align(
         int labelIdx = ltrIdx % 2 == 0 ? blank_token : targets[ltrIdx / 2];
         result.paths[t] = labelIdx;
         
-        // 修复：直接使用保存的原始概率值
-        result.scores[t] = frameProbs[t][labelIdx];
+        // 计算概率：对数概率取exp，并限制在[0,1]范围内
+        float logProb = frameProbs[t][labelIdx];
+        float prob = std::exp(logProb);
+        result.scores[t] = std::max(0.0f, std::min(1.0f, prob));
         
         if (t > 0) {
             ltrIdx -= backPtr[t][ltrIdx];
