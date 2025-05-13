@@ -469,10 +469,10 @@ public class MainActivity extends AppCompatActivity {
                 int tokenId = alignmentResult.paths[i];
                 float logProb = alignmentResult.timePoints[i];
                 
-                // 正确计算概率值：logProb本身就是对数概率，直接取exp即可
-                float probability = (float) Math.exp(logProb);
-                // 确保概率值在0到1之间
-                probability = Math.max(0.0f, Math.min(1.0f, probability));
+//                // 正确计算概率值：logProb本身就是对数概率，直接取exp即可
+//                float probability = (float) Math.exp(logProb);
+//                // 确保概率值在0到1之间
+//                probability = Math.max(0.0f, Math.min(1.0f, probability));
                 
                 // 计算实际时间（秒）
                 float timeInSeconds = i * FRAME_SHIFT_S;
@@ -487,7 +487,7 @@ public class MainActivity extends AppCompatActivity {
                 result.append(String.format("%-4s  %-10.3f  %-10.3f\n", 
                     phoneme,           // 音素
                     timeInSeconds,     // 开始时间（秒）
-                    probability        // 概率值
+                    logProb            // 对数概率        // 概率值
                 ));
             }
             

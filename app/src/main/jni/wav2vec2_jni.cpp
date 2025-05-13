@@ -34,6 +34,88 @@ public:
     static constexpr int FRAME_SHIFT = 320;   // 20ms at 16kHz
     static constexpr int FEATURE_DIM = wav2vec2::ModelConfig::FEATURE_DIM;
 
+// 音频标准化函数：执行零均值和单位方差的标准化
+    std::vector<float> normalizeAudio(const float* audioData, int length) {
+        std::vector<float> normalizedAudio(audioData, audioData + length);
+
+        // 计算均值
+        float mean = 0.0f;
+        for (int i = 0; i < length; i++) {
+            mean += audioData[i];
+        }
+        mean /= length;
+
+        // 计算方差
+        float variance = 0.0f;
+        for (int i = 0; i < length; i++) {
+            float diff = audioData[i] - mean;
+            variance += diff * diff;
+        }
+        variance /= length;
+
+        // 计算标准差
+        float stdDev = std::sqrt(variance);
+
+        // 防止除以零
+        if (stdDev < 1e-10) {
+            stdDev = 1.0f;
+        }
+
+        // 执行标准化
+        for (int i = 0; i < length; i++) {
+            normalizedAudio[i] = (audioData[i] - mean) / stdDev;
+        }
+
+        return normalizedAudio;
+    }
+
+// 优化版本的音频标准化函数
+    std::vector<float> normalizeAudioOptimized(const float* audioData, int length) {
+        std::vector<float> normalizedAudio(length);
+
+        // 使用在线算法计算均值和方差（Welford's online algorithm）
+        double mean = 0.0;
+        double M2 = 0.0;
+
+#pragma omp parallel
+        {
+            // 每个线程的局部变量
+            double local_mean = 0.0;
+            double local_M2 = 0.0;
+            int count = 0;
+
+            // 并行计算每个线程的局部统计量
+#pragma omp for nowait
+            for (int i = 0; i < length; i++) {
+                count++;
+                double delta = audioData[i] - local_mean;
+                local_mean += delta / count;
+                double delta2 = audioData[i] - local_mean;
+                local_M2 += delta * delta2;
+            }
+
+            // 合并各个线程的结果
+#pragma omp critical
+            {
+                double delta = local_mean - mean;
+                mean += delta * count / (count + length);
+                M2 += local_M2 + delta * delta * count * length / (count + length);
+            }
+        }
+
+        // 计算最终的标准差
+        double variance = M2 / length;
+        float stdDev = std::sqrt(std::max(variance, 1e-10));
+
+        // 并行执行标准化
+#pragma omp parallel for
+        for (int i = 0; i < length; i++) {
+            normalizedAudio[i] = (audioData[i] - mean) / stdDev;
+        }
+
+        return normalizedAudio;
+    }
+    
     // 音频预处理函数
     std::vector<float> preprocessAudio(const float* audioData, int length) {
         if (!audioData || length <= 0) {
@@ -88,6 +170,8 @@ public:
         LOGI("Audio processing complete: %d samples", normalized.size());
         return normalized;
     }
+
+    
 
     // 检查asset文件是否存在
     bool assetExists(AAssetManager* mgr, const char* filename) {
@@ -223,7 +307,13 @@ public:
         LOGI("Processing audio data: length=%d samples", length);
 
         // 音频预处理
-        std::vector<float> processed = preprocessAudio(audioData, length);
+//
+        double PreProcessStartTime = getCurrentTime();
+//        std::vector<float> processed = normalizeAudioOptimized(audioData, length);//1.126953 ms 1.221924 ms 1.304932 ms 1.244141 ms
+//        std::vector<float> processed = preprocessAudio(audioData, length);// 2.360107 ms  1.0808 ms 1.3869ms 1.205078 ms 1.290039 ms
+        std::vector<float> processed = normalizeAudio(audioData, length);//1.244141 ms 0.617920 ms 0.636963 ms 0.772949 ms
+        double PreProcessEndTime = getCurrentTime();
+        LOGI("Preprocess time: %f ms", (PreProcessEndTime - PreProcessStartTime) );
         if(processed.empty()) {
             LOGE("Audio preprocessing failed");
             return nullptr;
@@ -424,46 +514,46 @@ public:
         return initialized;
     }
 
-    int preprocessAudio(const ncnn::Mat& audioMat, ncnn::Mat& preprocessed) {
-        if (audioMat.empty()) {
-            LOGE("Input audio Mat is empty");
-            return -1;
-        }
-
-        // 检查音频数据是否为单通道
-        if (audioMat.c != 1) {
-            LOGE("Input audio Mat must be single channel");
-            return -1;
-        }
-
-        // 检查音频数据是否为16kHz采样率
-        if (audioMat.w != FRAME_LENGTH) {
-            LOGE("Input audio Mat must be %d samples long", FRAME_LENGTH);
-            return -1;
-        }
-
-        // 检查音频数据是否为单精度浮点数
-        if (audioMat.elemsize != sizeof(float)) {
-            LOGE("Input audio Mat must be float32 format");
-            return -1;
-        }
-
-        // 执行音频预处理
-        std::vector<float> processed = preprocessAudio((const float*)audioMat.data, audioMat.h);
-        if (processed.empty()) {
-            LOGE("Audio preprocessing failed");
-            return -1;
-        }
-
-        // 将处理后的音频数据转换为ncnn::Mat
-        preprocessed = ncnn::Mat(processed.size(), processed.data(), sizeof(float), 1);
-        if (preprocessed.empty()) {
-            LOGE("Failed to create preprocessed Mat");
-            return -1;
-        }
-
-        return 0;
-    }
+//    int preprocessAudio(const ncnn::Mat& audioMat, ncnn::Mat& preprocessed) {
+//        if (audioMat.empty()) {
+//            LOGE("Input audio Mat is empty");
+//            return -1;
+//        }
+//
+//        // 检查音频数据是否为单通道
+//        if (audioMat.c != 1) {
+//            LOGE("Input audio Mat must be single channel");
+//            return -1;
+//        }
+//
+//        // 检查音频数据是否为16kHz采样率
+//        if (audioMat.w != FRAME_LENGTH) {
+//            LOGE("Input audio Mat must be %d samples long", FRAME_LENGTH);
+//            return -1;
+//        }
+//
+//        // 检查音频数据是否为单精度浮点数
+//        if (audioMat.elemsize != sizeof(float)) {
+//            LOGE("Input audio Mat must be float32 format");
+//            return -1;
+//        }
+//
+//        // 执行音频预处理
+//        std::vector<float> processed = preprocessAudio((const float*)audioMat.data, audioMat.h);
+//        if (processed.empty()) {
+//            LOGE("Audio preprocessing failed");
+//            return -1;
+//        }
+//
+//        // 将处理后的音频数据转换为ncnn::Mat
+//        preprocessed = ncnn::Mat(processed.size(), processed.data(), sizeof(float), 1);
+//        if (preprocessed.empty()) {
+//            LOGE("Failed to create preprocessed Mat");
+//            return -1;
+//        }
+//
+//        return 0;
+//    }
 };
 
 // 在类外定义静态常量
