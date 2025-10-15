@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/white">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/purple_500"
+        android:padding="16dp">
+        
+        <TextView
+            android:id="@+id/lesson_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="课程标题"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+            
+    </LinearLayout>
+
+    <!-- 主要内容区域 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="练习界面开发中..."
+            android:textColor="@color/gray_600"
+            android:textSize="18sp"
+            android:gravity="center" />
+            
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="这里将实现发音评估、音素对齐等功能"
+            android:textColor="@color/gray_500"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:maxLines="3"
+            android:ellipsize="end" />
+            
+    </LinearLayout>
+
+</LinearLayout>

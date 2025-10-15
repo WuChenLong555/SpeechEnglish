@@ -1,0 +1,56 @@
+{
+  "id": "H_DROPPING",
+  "title": "H音省略练习",
+  "description": "学习英语中H音的省略现象，掌握自然发音技巧",
+  "category": "liaison",
+  "difficulty": "intermediate",
+  "duration": "12分钟",
+  "type": "lesson",
+  "exercises": [
+    {
+      "id": "ex_hd_01",
+      "type": "liaison",
+      "title": "H音省略练习 1",
+      "description": "练习H音的省略现象",
+      "audio_reference": "SI1104.wav",
+      "original_text": "This girl soon drops the bourgeoisie psychiatrist, who disapproves of her life.",
+      "original_phones": [["ð","ɪ","s"],["ɡ","ɜː","l"],["s","uː","n"],["d","ɹ","ɑː","p","s"],["ð","ə"],["b","ʊɹ","ʒ","w","ɑː","z","iː"],["s","aɪ","k","aɪə","t","ɹ","ɪ","s","t"],["h","uː"],["d","ɪ","s","ɐ","p","ɹ","uː","v","z"],["ʌ","v"],["h","ɜː"],["l","aɪ","f"]]
+    },
+    {
+      "id": "ex_hd_02",
+      "type": "liaison",
+      "title": "H音省略练习 2",
+      "description": "练习H音的省略现象",
+      "audio_reference": "SI1139.wav",
+      "original_text": "In time she presents her aristocratic husband with a coal-black child.",
+      "original_phones": [["ɪ","n"],["t","aɪ","m"],["ʃ","iː"],["p","ɹ","ɪ","z","ɛ","n","t","s"],["h","ɜː","ɹ"],["ɚ","ɹ","ɪ","s","t","ə","k","ɹ","æ","ɾ","ɪ","k"],["h","ʌ","s","b","ə","n","d"],["w","ɪ","ð"],["ɐ"],["k","oʊ","l","b","l","æ","k"],["tʃ","aɪ","l","d"]]
+    },
+    {
+      "id": "ex_hd_03",
+      "type": "liaison",
+      "title": "H音省略练习 3",
+      "description": "练习H音的省略现象",
+      "audio_reference": "SI481.wav",
+      "original_text": "This, he added, brought about petty jealousies and petty personal grievances.",
+      "original_phones": [["ð","ɪ","s"],["h","iː"],["æ","d","ᵻ","d"],["b","ɹ","ɔː","t"],["ɐ","b","aʊ","t"],["p","ɛ","ɾ","i"],["dʒ","ɛ","l","ə","s","i","z"],["æ","n","d"],["p","ɛ","ɾ","i"],["p","ɜː","s","ə","n","əl"],["ɡ","ɹ","iː","v","ə","n","s","ᵻ","z"]]
+    },
+    {
+      "id": "ex_hd_04",
+      "type": "liaison",
+      "title": "H音省略练习 4",
+      "description": "练习H音的省略现象",
+      "audio_reference": "SI537.wav",
+      "original_text": "The boy's father bought him a large toy train for Christmas.",
+      "original_phones": [["ð","ə"],["b","ɔɪ","z"],["f","ɑː","ð","ɚ"],["b","ɔː","t"],["h","ɪ","m"],["ɐ"],["l","ɑː","dʒ"],["t","ɔɪ"],["t","ɹ","eɪ","n"],["f","ɔː","ɹ"],["k","ɹ","ɪ","s","m","ə","s"]]
+    },
+    {
+      "id": "ex_hd_05",
+      "type": "liaison",
+      "title": "H音省略练习 5",
+      "description": "练习H音的省略现象",
+      "audio_reference": "SI574.wav",
+      "original_text": "The small boy didn't know if the train was his or his brother's.",
+      "original_phones": [["ð","ə"],["s","m","ɔː","l"],["b","ɔɪ"],["d","ɪ","d","n̩","t"],["n","oʊ"],["ɪ","f"],["ð","ə"],["t","ɹ","eɪ","n"],["w","ɑː","z"],["h","ɪ","z"],["ɔː","ɹ"],["h","ɪ","z"],["b","ɹ","ʌ","ð","ɚ","z"]]
+    }
+  ]
+}

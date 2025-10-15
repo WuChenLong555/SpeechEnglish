@@ -1,0 +1,46 @@
+{
+  "id": "lesson_001",
+  "title": "基础音素发音练习",
+  "description": "学习英语基础音素的正确发音方法",
+  "difficulty": "beginner",
+  "category": "发音基础",
+  "duration": "15分钟",
+  "exercises": [
+    {
+      "id": "ex_001_01",
+      "type": "pronunciation",
+      "title": "元音 /iː/ 练习",
+      "description": "练习长元音 /iː/ 的发音，如 'see', 'tree', 'me' 中的发音",
+      "target_phoneme": "iː",
+      "example_words": ["see", "tree", "me", "bee", "key"],
+      "audio_reference": "lesson_001_ex_001.wav"
+    },
+    {
+      "id": "ex_001_02",
+      "type": "pronunciation", 
+      "title": "元音 /ɪ/ 练习",
+      "description": "练习短元音 /ɪ/ 的发音，如 'sit', 'big', 'fish' 中的发音",
+      "target_phoneme": "ɪ",
+      "example_words": ["sit", "big", "fish", "win", "kid"],
+      "audio_reference": "lesson_001_ex_002.wav"
+    },
+    {
+      "id": "ex_001_03",
+      "type": "pronunciation",
+      "title": "辅音 /p/ 练习",
+      "description": "练习清辅音 /p/ 的发音，注意送气特点",
+      "target_phoneme": "p",
+      "example_words": ["pen", "pat", "cup", "top", "map"],
+      "audio_reference": "lesson_001_ex_003.wav"
+    },
+    {
+      "id": "ex_001_04",
+      "type": "pronunciation",
+      "title": "辅音 /b/ 练习", 
+      "description": "练习浊辅音 /b/ 的发音，注意声带振动",
+      "target_phoneme": "b",
+      "example_words": ["bat", "big", "rub", "job", "web"],
+      "audio_reference": "lesson_001_ex_004.wav"
+    }
+  ]
+}

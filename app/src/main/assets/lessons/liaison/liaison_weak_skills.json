@@ -1,0 +1,29 @@
+{
+  "id": "liaison_weak_skills",
+  "title": "连读和弱读技巧",
+  "description": "综合学习英语连读和弱读技巧，提高口语流畅度和自然度",
+  "category": "comprehensive",
+  "difficulty": "intermediate",
+  "duration": "60分钟",
+  "type": "main_course",
+  "sub_courses": [
+    {
+      "id": "CONSONANT_VOWEL",
+      "title": "辅音-元音连读练习",
+      "description": "学习辅音和元音之间的连读现象，提高口语流畅度",
+      "category": "liaison",
+      "difficulty": "beginner",
+      "duration": "15分钟",
+      "file": "CONSONANT_VOWEL/CONSONANT_VOWEL.json"
+    },
+    {
+      "id": "H_DROPPING",
+      "title": "H音省略练习",
+      "description": "学习英语中H音的省略现象，掌握自然发音技巧",
+      "category": "liaison",
+      "difficulty": "intermediate",
+      "duration": "12分钟",
+      "file": "H_DROPPING/H_DROPPING.json"
+    }
+  ]
+}

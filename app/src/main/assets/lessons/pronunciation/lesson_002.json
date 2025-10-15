@@ -1,0 +1,46 @@
+{
+  "id": "lesson_002",
+  "title": "常见辅音组合练习",
+  "description": "掌握常见辅音组合的发音技巧",
+  "difficulty": "beginner",
+  "category": "辅音练习",
+  "duration": "20分钟",
+  "exercises": [
+    {
+      "id": "ex_002_01",
+      "type": "pronunciation",
+      "title": "辅音组合 /pl/ 练习",
+      "description": "练习辅音组合 /pl/ 的发音，如 'play', 'please', 'plane' 中的发音",
+      "target_phoneme": "pl",
+      "example_words": ["play", "please", "plane", "plum", "plot"],
+      "audio_reference": "lesson_002_ex_001.wav"
+    },
+    {
+      "id": "ex_002_02",
+      "type": "pronunciation",
+      "title": "辅音组合 /br/ 练习",
+      "description": "练习辅音组合 /br/ 的发音，如 'bread', 'brother', 'break' 中的发音",
+      "target_phoneme": "br",
+      "example_words": ["bread", "brother", "break", "brown", "bridge"],
+      "audio_reference": "lesson_002_ex_002.wav"
+    },
+    {
+      "id": "ex_002_03",
+      "type": "pronunciation",
+      "title": "辅音组合 /tr/ 练习",
+      "description": "练习辅音组合 /tr/ 的发音，如 'tree', 'train', 'try' 中的发音",
+      "target_phoneme": "tr",
+      "example_words": ["tree", "train", "try", "truck", "true"],
+      "audio_reference": "lesson_002_ex_003.wav"
+    },
+    {
+      "id": "ex_002_04",
+      "type": "pronunciation",
+      "title": "辅音组合 /st/ 练习",
+      "description": "练习辅音组合 /st/ 的发音，如 'stop', 'star', 'study' 中的发音",
+      "target_phoneme": "st",
+      "example_words": ["stop", "star", "study", "stone", "stick"],
+      "audio_reference": "lesson_002_ex_004.wav"
+    }
+  ]
+}

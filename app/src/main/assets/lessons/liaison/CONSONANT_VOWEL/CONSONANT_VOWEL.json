@@ -1,0 +1,65 @@
+{
+  "id": "CONSONANT_VOWEL",
+  "title": "辅音-元音连读练习",
+  "description": "学习辅音和元音之间的连读现象，提高口语流畅度",
+  "category": "liaison",
+  "difficulty": "beginner",
+  "duration": "15分钟",
+  "type": "lesson",
+  "exercises": [
+    {
+      "id": "ex_cv_01",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 1",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SA1.wav",
+      "original_text": "She had your dark suit in greasy wash water all year.",
+      "original_phones": [["ʃ","iː"],["h","æ","d"],["j","ʊɹ"],["d","ɑːɹ","k"],["s","uː","t"],["ɪ","n"],["ɡ","ɹ","iː","z","i"],["w","ɑː","ʃ"],["w","ɔː","ɾ","ɚ","ɹ"],["ɔː","l"],["j","ɪɹ"]]
+    },
+    {
+      "id": "ex_cv_02",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 2",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SA2.wav",
+      "original_text": "Don't ask me to carry an oily rag like that.",
+      "original_phones": [["d","oʊ","n","t"],["æ","s","k"],["m","iː"],["t","ə"],["k","æ","ɹ","i"],["ɐ","n"],["ɔɪ","l","i"],["ɹ","æ","ɡ"],["l","aɪ","k"],["ð","æ","t"]]
+    },
+    {
+      "id": "ex_cv_03",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 3",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SI454.wav",
+      "original_text": "If you destroy confidence in banks, you do something to the economy, he said.",
+      "original_phones": [["ɪ","f"],["j","uː"],["d","ᵻ","s","t","ɹ","ɔɪ"],["k","ɑː","n","f","ɪ","d","ə","n","s"],["ɪ","n"],["b","æ","ŋ","k","s"],["j","uː"],["d","uː"],["s","ʌ","m","θ","ɪ","ŋ"],["t","ə"],["ð","ɪ"],["ɪ","k","ɑː","n","ə","m","i"],["h","iː"],["s","ɛ","d"]]
+    },
+    {
+      "id": "ex_cv_04",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 4",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SI456.wav",
+      "original_text": "Two other cases also were under advisement.",
+      "original_phones": [["t","uː"],["ʌ","ð","ɚ"],["k","eɪ","s","ᵻ","z"],["ɔː","l","s","oʊ"],["w","ɜː","ɹ"],["ʌ","n","d","ɚ","ɹ"],["ɐ","d","v","aɪ","z","m","ə","n","t"]]
+    },
+    {
+      "id": "ex_cv_05",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 5",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SI476.wav",
+      "original_text": "So, if anybody solicits by phone, make sure you mail the dough to the above.",
+      "original_phones": [["s","oʊ"],["ɪ","f"],["ɛ","n","ɪ","b","ɑː","d","i"],["s","ə","l","ɪ","s","ɪ","t","s"],["b","aɪ"],["f","oʊ","n"],["m","eɪ","k"],["ʃ","ʊɹ"],["j","uː"],["m","eɪ","l"],["ð","ə"],["d","oʊ"],["t","ə"],["ð","ɪ"],["ə","b","ʌ","v"]]
+    },
+    {
+      "id": "ex_cv_06",
+      "type": "liaison",
+      "title": "辅音-元音连读练习 6",
+      "description": "练习辅音和元音之间的连读技巧",
+      "audio_reference": "SI481.wav",
+      "original_text": "This, he added, brought about petty jealousies and petty personal grievances.",
+      "original_phones": [["ð","ɪ","s"],["h","iː"],["æ","d","ᵻ","d"],["b","ɹ","ɔː","t"],["ɐ","b","aʊ","t"],["p","ɛ","ɾ","i"],["dʒ","ɛ","l","ə","s","i","z"],["æ","n","d"],["p","ɛ","ɾ","i"],["p","ɜː","s","ə","n","əl"],["ɡ","ɹ","iː","v","ə","n","s","ᵻ","z"]]
+    }
+  ]
+}

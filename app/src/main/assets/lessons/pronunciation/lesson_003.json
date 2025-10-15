@@ -1,0 +1,46 @@
+{
+  "id": "lesson_003",
+  "title": "元音发音对比训练",
+  "description": "区分相似元音的发音差异",
+  "difficulty": "intermediate",
+  "category": "元音练习",
+  "duration": "25分钟",
+  "exercises": [
+    {
+      "id": "ex_003_01",
+      "type": "pronunciation",
+      "title": "元音对比 /iː/ vs /ɪ/",
+      "description": "区分长元音 /iː/ 和短元音 /ɪ/ 的发音差异",
+      "target_phoneme": "iː,ɪ",
+      "example_words": ["see/sit", "beat/bit", "sheep/ship", "leave/live", "feel/fill"],
+      "audio_reference": "lesson_003_ex_001.wav"
+    },
+    {
+      "id": "ex_003_02",
+      "type": "pronunciation",
+      "title": "元音对比 /e/ vs /æ/",
+      "description": "区分元音 /e/ 和 /æ/ 的发音差异",
+      "target_phoneme": "e,æ",
+      "example_words": ["bed/bad", "pen/pan", "men/man", "said/sad", "get/gat"],
+      "audio_reference": "lesson_003_ex_002.wav"
+    },
+    {
+      "id": "ex_003_03",
+      "type": "pronunciation",
+      "title": "元音对比 /uː/ vs /ʊ/",
+      "description": "区分长元音 /uː/ 和短元音 /ʊ/ 的发音差异",
+      "target_phoneme": "uː,ʊ",
+      "example_words": ["pool/pull", "fool/full", "food/foot", "moon/book", "soon/look"],
+      "audio_reference": "lesson_003_ex_003.wav"
+    },
+    {
+      "id": "ex_003_04",
+      "type": "pronunciation",
+      "title": "元音对比 /ɔː/ vs /ɒ/",
+      "description": "区分长元音 /ɔː/ 和短元音 /ɒ/ 的发音差异",
+      "target_phoneme": "ɔː,ɒ",
+      "example_words": ["caught/cot", "saw/sock", "law/lot", "ball/bottle", "call/collar"],
+      "audio_reference": "lesson_003_ex_004.wav"
+    }
+  ]
+}

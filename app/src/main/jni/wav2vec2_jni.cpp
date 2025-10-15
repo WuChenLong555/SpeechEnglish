@@ -24,6 +24,7 @@ class Wav2Vec2 {
 public:
     ncnn::Net net;
     ncnn::VulkanDevice* vkdev;
+    ncnn::Net net_gpu;
     bool initialized = false;
     bool useGPU = false;
     ncnn::Mat lastOutput;  // 保存最后的输出结果
@@ -219,76 +220,68 @@ public:
             LOGE("Model files missing! param exists: %d, bin exists: %d", paramExists, binExists);
             return false;
         }
+        // 初始化CPU网络
+        LOGI("Initializing CPU network");
+        // 直接使用默认的ncnn::Option
+         ncnn::Option opt;
+         opt.lightmode = true;
+         opt.num_threads = 4;
+         opt.use_vulkan_compute = false;
+         opt.use_fp16_storage = false;//不支持fp16存储,所以只能改成false模型才能运行.
+         net.opt = opt;
 
-        // 重置网络
-        net.clear();
-        //TODO
-        // 尝试初始化GPU失败，只用cpu了只能
-//        if (ncnn::get_gpu_count() > 0) {
-//            LOGI("Found %d GPU devices", ncnn::get_gpu_count());
-//
-//            // 创建GPU实例
-//            if (ncnn::create_gpu_instance() == 0) {
-//                LOGI("Successfully created GPU instance");
-//
-//                // 创建VulkanDevice
-//                vkdev = new ncnn::VulkanDevice();
-//
-//                if (vkdev && vkdev->info.support_fp16_packed() && vkdev->info.support_fp16_storage()) {
-//                    LOGI("Device supports FP16, enabling GPU acceleration");
-//
-//                    // 配置GPU选项
-//                    ncnn::Option opt;
-//                    opt.lightmode = true;
-//                    opt.num_threads = 4;
-//                    opt.use_vulkan_compute = true;
-//                    opt.use_fp16_packed = true;
-//                    opt.use_fp16_storage = true;
-//                    opt.use_fp16_arithmetic = true;
-//
-//                    // 设置网络选项
-//                    net.opt = opt;
-//
-//                    // 设置vulkan设备
-//                    net.set_vulkan_device(vkdev);
-//
-//                    useGPU = true;
-//                } else {
-//                    LOGE("Device does not support required FP16 features");
-//                    if (vkdev) {
-//                        delete vkdev;
-//                        vkdev = nullptr;
-//                    }
-//                    ncnn::destroy_gpu_instance();
-//                }
-//            } else {
-//                LOGE("Failed to create GPU instance");
-//            }
-//        }
-
-        // 如果GPU初始化失败，使用CPU模式
-        if (!useGPU) {
-            LOGI("Using CPU mode");
-            ncnn::Option opt;
-            opt.lightmode = true;
-            opt.num_threads = 4;
-            opt.use_vulkan_compute = false;
-            opt.use_fp16_storage = false;
-            net.opt = opt;
-        }
-
-        // 加载模型
+        // 加载CPU模型
         if (net.load_param(mgr, "wav2vec2_emissions.ncnn.param") != 0) {
-            LOGE("Failed to load param file");
+            LOGE("Failed to load CPU param file");
             return false;
         }
+        
         if (net.load_model(mgr, "wav2vec2_emissions.ncnn.bin") != 0) {
-            LOGE("Failed to load model file");
+            LOGE("Failed to load CPU model file");
             return false;
+        }
+        LOGI("CPU network initialized successfully");
+
+        // 尝试初始化GPU网络
+        bool gpuAvailable = false;
+        if (ncnn::get_gpu_count() > 0) {
+            LOGI("Found %d GPU devices, initializing GPU network", ncnn::get_gpu_count());
+            
+            // 配置GPU选项
+            ncnn::Option gpu_opt;
+            gpu_opt.lightmode = true;
+            gpu_opt.num_threads = 4;
+            gpu_opt.use_fp16_storage = false;
+            gpu_opt.use_vulkan_compute = true;
+            net_gpu.opt = gpu_opt;
+            
+            // 尝试加载GPU模型
+            if (net_gpu.load_param(mgr, "wav2vec2_emissions.ncnn.param") == 0) {
+                LOGI("GPU param file loaded successfully");
+                
+                // 尝试加载模型权重
+                if (net_gpu.load_model(mgr, "wav2vec2_emissions.ncnn.bin") == 0) {
+                    LOGI("GPU model file loaded successfully");
+                    gpuAvailable = true;
+                    LOGI("GPU network initialized successfully");
+                } else {
+                    LOGE("Failed to load GPU model file, GPU network will not be available");
+                    net_gpu.clear();
+                }
+            } else {
+                LOGE("Failed to load GPU param file, GPU network will not be available");
+                net_gpu.clear();
+            }
+        } else {
+            LOGI("No GPU devices found, GPU network will not be available");
         }
 
+        // 设置GPU可用性标志
+        useGPU = false;
         initialized = true;
-        LOGI("Model initialized with %s acceleration", useGPU ? "GPU" : "CPU");
+        
+        LOGI("Model initialization completed. GPU acceleration %s", 
+             useGPU ? "available" : "not available");
         return true;
     }
 
@@ -323,13 +316,10 @@ public:
         // 记录开始时间
         double startTime = getCurrentTime();
         // 创建推理器
-        ncnn::Extractor ex = net.create_extractor();
+        ncnn::Extractor ex = useGPU ? net_gpu.create_extractor() : net.create_extractor();
         if (useGPU) {
             ex.set_vulkan_compute(true);
         }
-
-
-
         // 创建输入Mat
         ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
         if (in.empty()) {
@@ -773,4 +763,4 @@ Java_com_example_speechenglish_Wav2Vec2_destroy(JNIEnv* env, jobject thiz, jlong
     }
 }
 
-} 
+}

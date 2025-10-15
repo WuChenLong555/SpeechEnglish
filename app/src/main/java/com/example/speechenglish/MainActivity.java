@@ -30,7 +30,6 @@ import android.os.Build;
 import android.os.Environment;
 import java.io.File;
 import android.text.TextUtils;
-
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 1;
@@ -100,6 +99,21 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(MainActivity.this, PhonemeTestActivity.class);
             startActivity(intent);
         });
+
+        // 初始化课程选择按钮
+        Button lessonSelectionButton = findViewById(R.id.lesson_selection_button);
+        lessonSelectionButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LessonSelectionActivity.class);
+            startActivity(intent);
+        });
+
+        // 初始化课程测试按钮
+        Button lessonTestButton = findViewById(R.id.lesson_test_button);
+        lessonTestButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LessonTestActivity.class);
+            startActivity(intent);
+        });
+
     }
 
     private void showProgress(boolean show) {
@@ -737,4 +751,4 @@ public class MainActivity extends AppCompatActivity {
             vulkanManager.release();
         }
     }
-} 
+}
