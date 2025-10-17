@@ -12,23 +12,11 @@ public class LiaisonRules {
         return IPAPhoneSets.CONSONANTS.contains(phoneme);
     }
 
-    /**
-     * 检查h音是否应该脱落
-     * 只针对 he, his, him, her，且仅在句中或句尾（middle, final）才脱落
-     * @param word 包含h的单词
-     * @param position 'initial'(句首), 'middle'(句中), 'final'(句尾), 'pause'(停顿后)
-     * @return 是否应该脱落h音
-     */
-    public static boolean checkHDropping(String word, String position) {
-        if (!PronounChecker.isHPronoun(word)) {
-            return false;
-        }
-        // 句首或停顿后不脱落
-        if ("initial".equals(position) || "pause".equals(position)) {
-            return false;
-        }
-        // 句中或句尾可以脱落
-        return "middle".equals(position) || "final".equals(position);
+    // h脱落：需要目标词在集合中，且位置非initial/pause，且前一个音素为辅音
+    public static boolean checkHDropping(String word, String prevPhoneme) {
+        if (word == null || prevPhoneme == null) return false;
+        if (!PronounChecker.isHPronoun(word)) return false;
+        return isConsonant(prevPhoneme);
     }
 
     /**
@@ -36,70 +24,84 @@ public class LiaisonRules {
      * @param phoneme1 第一个音素
      * @param phoneme2 第二个音素
      * @param word2 第二个单词（用于h音脱落判断）
-     * @param position 位置信息
      * @return 连读类型，如果没有连读则返回null
      */
-    public static LiaisonType checkLiaison(String phoneme1, String phoneme2, 
-                                         String word2, String position) {
-        // 元音 + 元音连读
-        if (IPAPhoneSets.ALL_VOWELS.contains(phoneme1) && 
-            IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
-            return LiaisonType.VOWEL_VOWEL;
-        }
-        
-        // j连音（在高前元音后）
-        if (("i:".equals(phoneme1) || "ɪ".equals(phoneme1)) && 
-            IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+    public static LiaisonType checkLiaison(String phoneme1, String phoneme2,
+                                           String word2) {
+        // j 连音：高前元音或相应双元音后接任意元音
+        if (("i:".equals(phoneme1) || "ɪ".equals(phoneme1) || "eɪ".equals(phoneme1)
+                || "aɪ".equals(phoneme1) || "ɔɪ".equals(phoneme1))
+                && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
             return LiaisonType.J_LINKING;
         }
-        
-        // w连音（在圆唇元音后）
-        if (("u:".equals(phoneme1) || "ʊ".equals(phoneme1)) && 
-            IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+
+        // w 连音：圆唇元音或相应双元音后接任意元音
+        if (("u:".equals(phoneme1) || "oʊ".equals(phoneme1) || "aʊ".equals(phoneme1))
+                && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
             return LiaisonType.W_LINKING;
         }
-        
-        // 辅音 + 元音连读
+
+        // r 连音：r/ɹ/儿化元音后接任意元音
+        if (("r".equals(phoneme1) || "ɹ".equals(phoneme1)
+                || "ɪɹ".equals(phoneme1) || "ɚ".equals(phoneme1)
+                || "ɜ".equals(phoneme1) || "ɜː".equals(phoneme1))
+                && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+            return LiaisonType.R_LINKING;
+        }
+
+        // 鼻音 + 元音
+        if (IPAPhoneSets.NASALS.contains(phoneme1) && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+            return LiaisonType.NASAL_VOWEL;
+        }
+        // 摩擦音 + 元音
+        if (IPAPhoneSets.FRICATIVES.contains(phoneme1) && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+            return LiaisonType.FRICATIVE_VOWEL;
+        }
+        // 爆破音 + 元音
+        if (IPAPhoneSets.PLOSIVES.contains(phoneme1) && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
+            return LiaisonType.PLOSIVE_VOWEL;
+        }
+
+        // 辅音 + 元音
         if (isConsonant(phoneme1) && IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
             return LiaisonType.CONSONANT_VOWEL;
         }
-        
-        // SH连读
-        if (("s".equals(phoneme1) || "z".equals(phoneme1)) && "ʃ".equals(phoneme2)) {
+
+        // SH 连读
+        if (("s".equals(phoneme1) || "z".equals(phoneme1) || "ʃ".equals(phoneme1)) && "ʃ".equals(phoneme2)) {
             return LiaisonType.SH_LIAISON;
         }
-        
-        // Y连读（半元音连读）
-        if (("s".equals(phoneme1) || "z".equals(phoneme1) || 
-             "t".equals(phoneme1) || "d".equals(phoneme1) || 
-             "k".equals(phoneme1)) && "j".equals(phoneme2)) {
+
+        // Y 连读（半元音）
+        if (("s".equals(phoneme1) || "z".equals(phoneme1) || "t".equals(phoneme1) || "d".equals(phoneme1))
+                && "j".equals(phoneme2)) {
             return LiaisonType.Y_LIAISON;
         }
-        
-        // h音脱落
+
+        // h 脱落
         if ("h".equals(phoneme2)) {
-            if (word2 != null && checkHDropping(word2, position)) {
+            if (word2 != null && checkHDropping(word2, phoneme1)) {
                 return LiaisonType.H_DROPPING;
             }
             return null;
         }
-        
-        // r连音
-        if (("r".equals(phoneme1) || "ɹ".equals(phoneme1) || "ɪɹ".equals(phoneme1)) && 
-            IPAPhoneSets.ALL_VOWELS.contains(phoneme2)) {
-            return LiaisonType.R_LINKING;
-        }
-        
-        // 相同辅音连读
-        if (isConsonant(phoneme1) && phoneme1.equals(phoneme2)) {
+
+        // 相同辅音（排除爆破音）
+        if (isConsonant(phoneme1) && phoneme1.equals(phoneme2) && !IPAPhoneSets.PLOSIVES.contains(phoneme1)) {
             return LiaisonType.SAME_CONSONANT;
         }
-        
-        // 爆破音省略（当后面跟辅音时）
+
+        // 爆破音省略：后续为任意辅音
         if (IPAPhoneSets.PLOSIVES.contains(phoneme1) && isConsonant(phoneme2)) {
             return LiaisonType.PLOSIVE_ELISION;
         }
-        
+
+        // 鼻化：鼻音后接部分爆破音
+        if (IPAPhoneSets.NASALS.contains(phoneme1) && ("k".equals(phoneme2) || "ɡ".equals(phoneme2)
+                || "p".equals(phoneme2) || "b".equals(phoneme2))) {
+            return LiaisonType.NASALIZATION;
+        }
+
         return null;
     }
 } 

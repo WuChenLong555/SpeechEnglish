@@ -144,6 +144,56 @@ AlignmentResult ForceAligner::align(
         }
     }
 
+    // 基于回溯路径聚合音素片段（跳过blank）
+    {
+        const int blank = blank_token;
+        int curToken = -1;
+        int segStart = -1;
+        float sumScore = 0.0f;
+        int count = 0;
+
+        auto flush_segment = [&](int endFrame) {
+            if (curToken >= 0 && count > 0) {
+                AlignmentResult::PhonemeSegment seg;
+                seg.token = curToken;
+                seg.startFrame = segStart;
+                seg.endFrame = endFrame;
+                seg.scoreMean = sumScore / std::max(1, count);
+                result.segments.push_back(seg);
+            }
+            curToken = -1;
+            segStart = -1;
+            sumScore = 0.0f;
+            count = 0;
+        };
+
+        for (int t = 0; t < T; ++t) {
+            int lab = result.paths[t];
+            if (lab == blank) {
+                if (curToken >= 0) {
+                    flush_segment(t - 1);
+                }
+                continue;
+            }
+            float s = result.scores[t]; // 或可用 frameProbs[t][lab]
+            if (curToken == lab) {
+                sumScore += s;
+                count += 1;
+            } else {
+                if (curToken >= 0) {
+                    flush_segment(t - 1);
+                }
+                curToken = lab;
+                segStart = t;
+                sumScore = s;
+                count = 1;
+            }
+        }
+        if (curToken >= 0) {
+            flush_segment(T - 1);
+        }
+    }
+
     return result;
 }
 

@@ -12,8 +12,14 @@ public enum LiaisonType {
     J_LINKING("J_LINKING"),               // j连音（在高前元音后）
     W_LINKING("W_LINKING"),               // w连音（在圆唇元音后）
     SAME_CONSONANT("SAME_CONSONANT"),     // 相同辅音连读
-    SH_LIAISON("SH_LIAISON"),            // SH连读
-    Y_LIAISON("Y_LIAISON");              // Y连读
+    SH_LIAISON("SH_LINKING"),            // SH连读
+    Y_LIAISON("Y_LINKING"),              // Y连读
+    LIQUID_VOWEL("LIQUID_VOWEL"),        // 流音+元音
+    NASAL_VOWEL("NASAL_VOWEL"),          // 鼻音+元音
+    FRICATIVE_VOWEL("FRICATIVE_VOWEL"),  // 摩擦音+元音
+    PLOSIVE_VOWEL("PLOSIVE_VOWEL"),      // 爆破音+元音
+    NASALIZATION("NASALIZATION"),        // 鼻化
+    SCHWA("SCHWA");                      // 中元音弱化
 
     private final String value;
 

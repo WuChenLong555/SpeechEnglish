@@ -304,8 +304,7 @@ public class PhonemeTestActivity extends AppCompatActivity {
             LiaisonType liaisonType = LiaisonRules.checkLiaison(
                 boundary.lastPhonemeOfPrevWord,
                 boundary.firstPhonemeOfNextWord,
-                boundary.prevWord,    // 提供单词信息
-                "middle"              // 位置信息
+                boundary.prevWord  // 提供单词信息
             );
             
             // 如果存在连读可能，添加到列表
@@ -321,7 +320,7 @@ public class PhonemeTestActivity extends AppCompatActivity {
                 String description = String.format("%s|%s 之间: %s",
                     boundary.prevWord,
                     boundary.nextWord,
-                    getDescriptionForLiaisonType(liaisonType, 
+                    getDescriptionForLiaisonType(liaisonType,
                         boundary.lastPhonemeOfPrevWord,
                         boundary.firstPhonemeOfNextWord)
                 );
@@ -391,7 +390,7 @@ public class PhonemeTestActivity extends AppCompatActivity {
             case PLOSIVE_ELISION:
                 return String.format("爆破音省略: %s → %s", phoneme1, phoneme2);
             case H_DROPPING:
-                return String.format("h音脱落: %s → %s", phoneme1, phoneme2);
+                return String.format("h音脱落(非句首/停顿且前为辅音): %s → %s", phoneme1, phoneme2);
             case R_LINKING:
                 return String.format("r连音: %s → %s", phoneme1, phoneme2);
             case J_LINKING:
@@ -404,6 +403,18 @@ public class PhonemeTestActivity extends AppCompatActivity {
                 return String.format("SH连读: %s → %s", phoneme1, phoneme2);
             case Y_LIAISON:
                 return String.format("Y连读: %s → %s", phoneme1, phoneme2);
+            case LIQUID_VOWEL:
+                return String.format("流音+元音: %s → %s", phoneme1, phoneme2);
+            case NASAL_VOWEL:
+                return String.format("鼻音+元音: %s → %s", phoneme1, phoneme2);
+            case FRICATIVE_VOWEL:
+                return String.format("摩擦音+元音: %s → %s", phoneme1, phoneme2);
+            case PLOSIVE_VOWEL:
+                return String.format("爆破音+元音: %s → %s", phoneme1, phoneme2);
+            case NASALIZATION:
+                return String.format("鼻化: %s → %s", phoneme1, phoneme2);
+            case SCHWA:
+                return String.format("中元音弱化: %s → %s", phoneme1, phoneme2);
             default:
                 return String.format("%s → %s", phoneme1, phoneme2);
         }

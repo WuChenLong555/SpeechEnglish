@@ -242,42 +242,42 @@ public:
         }
         LOGI("CPU network initialized successfully");
 
-        // 尝试初始化GPU网络
-        bool gpuAvailable = false;
-        if (ncnn::get_gpu_count() > 0) {
-            LOGI("Found %d GPU devices, initializing GPU network", ncnn::get_gpu_count());
-            
-            // 配置GPU选项
-            ncnn::Option gpu_opt;
-            gpu_opt.lightmode = true;
-            gpu_opt.num_threads = 4;
-            gpu_opt.use_fp16_storage = false;
-            gpu_opt.use_vulkan_compute = true;
-            net_gpu.opt = gpu_opt;
-            
-            // 尝试加载GPU模型
-            if (net_gpu.load_param(mgr, "wav2vec2_emissions.ncnn.param") == 0) {
-                LOGI("GPU param file loaded successfully");
-                
-                // 尝试加载模型权重
-                if (net_gpu.load_model(mgr, "wav2vec2_emissions.ncnn.bin") == 0) {
-                    LOGI("GPU model file loaded successfully");
-                    gpuAvailable = true;
-                    LOGI("GPU network initialized successfully");
-                } else {
-                    LOGE("Failed to load GPU model file, GPU network will not be available");
-                    net_gpu.clear();
-                }
-            } else {
-                LOGE("Failed to load GPU param file, GPU network will not be available");
-                net_gpu.clear();
-            }
-        } else {
-            LOGI("No GPU devices found, GPU network will not be available");
-        }
-
-        // 设置GPU可用性标志
-        useGPU = false;
+//        // 尝试初始化GPU网络
+//        bool gpuAvailable = false;
+//        if (ncnn::get_gpu_count() > 0) {
+//            LOGI("Found %d GPU devices, initializing GPU network", ncnn::get_gpu_count());
+//
+//            // 配置GPU选项
+//            ncnn::Option gpu_opt;
+//            gpu_opt.lightmode = true;
+//            gpu_opt.num_threads = 4;
+//            gpu_opt.use_fp16_storage = false;
+//            gpu_opt.use_vulkan_compute = true;
+//            net_gpu.opt = gpu_opt;
+//
+//            // 尝试加载GPU模型
+//            if (net_gpu.load_param(mgr, "wav2vec2_emissions.ncnn.param") == 0) {
+//                LOGI("GPU param file loaded successfully");
+//
+//                // 尝试加载模型权重
+//                if (net_gpu.load_model(mgr, "wav2vec2_emissions.ncnn.bin") == 0) {
+//                    LOGI("GPU model file loaded successfully");
+//                    gpuAvailable = true;
+//                    LOGI("GPU network initialized successfully");
+//                } else {
+//                    LOGE("Failed to load GPU model file, GPU network will not be available");
+//                    net_gpu.clear();
+//                }
+//            } else {
+//                LOGE("Failed to load GPU param file, GPU network will not be available");
+//                net_gpu.clear();
+//            }
+//        } else {
+//            LOGI("No GPU devices found, GPU network will not be available");
+//        }
+//
+//        // 设置GPU可用性标志
+//        useGPU = false;
         initialized = true;
         
         LOGI("Model initialization completed. GPU acceleration %s", 

@@ -23,6 +23,11 @@ set(WAV2VEC2_SOURCES
     wav2vec2_jni.cpp
     vulkan_manager.cpp
     force_aligner.cpp
+    phoneme/phoneme_sets.cpp
+    phoneme/liaison_rules.cpp
+    phoneme/phoneme_analyzer.cpp
+    phoneme/phoneme_jni.cpp
+    phoneme/token_mapper.cpp
 )
 
 

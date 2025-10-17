@@ -5,11 +5,14 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 只针对 he, his, him, her 的代词检查
+ * h-开头弱化代词及相关词的检查
  */
 public class PronounChecker {
     private static final Set<String> H_PRONOUNS = new HashSet<>(Arrays.asList(
-        "he", "his", "him", "her"
+        // 参考 Python 中的集合，适度扩展并统一为小写
+        "he", "his", "him", "her", "here", "house",
+        // 带标点的常见形式（来自参考）
+        "him,", "her,", "he,", "here,"
     ));
 
     public static boolean isHPronoun(String word) {

@@ -16,6 +16,14 @@ struct AlignmentResult {
     std::vector<int> paths;      // 对齐路径（每个时间步的音素索引）
     std::vector<float> scores;   // 对齐得分
     
+    struct PhonemeSegment {
+        int token;            // 词表ID（非blank）
+        int startFrame;       // 起始帧索引（含）
+        int endFrame;         // 结束帧索引（含）
+        float scoreMean;      // 片段内均值得分
+    };
+    std::vector<PhonemeSegment> segments; // 聚合后的音素片段
+    
     bool empty() const { return paths.empty() || scores.empty(); }
     size_t size() const { return paths.size(); }
 };
@@ -26,6 +34,7 @@ public:
     static AlignmentResult align(const ncnn::Mat& features, 
                                const std::vector<int>& targets,
                                int blank_token);
+
 
 private:
     // 内部实现细节
