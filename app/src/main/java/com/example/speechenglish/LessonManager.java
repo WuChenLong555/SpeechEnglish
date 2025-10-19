@@ -161,7 +161,7 @@ public class LessonManager {
             // 检查课程类型
             if (lesson.isMainCourse()) {
                 // 主课程：解析子课程列表
-                List<Lesson> subCourses = parseSubCourses(lessonDataJson);
+                List<Lesson> subCourses = parseSubCourses(lessonDataJson, lessonId);
                 lesson.setSubCourses(subCourses);
                 Log.i(TAG, "加载主课程详细数据完成: " + lessonId + ", 子课程数量: " + subCourses.size());
             } else {
@@ -182,7 +182,7 @@ public class LessonManager {
     }
     
     /**
-     * 解析练习数据
+     * 解析练习数据 - 主入口方法
      */
     private List<Exercise> parseExercises(JSONObject lessonDataJson, String lessonId) throws JSONException {
         List<Exercise> exercises = new ArrayList<>();
@@ -193,38 +193,111 @@ public class LessonManager {
         for (int i = 0; i < exercisesArray.length(); i++) {
             JSONObject exerciseJson = exercisesArray.getJSONObject(i);
             
-            String exerciseId = exerciseJson.getString("id");
-            String title = exerciseJson.getString("title");
-            String description = exerciseJson.optString("description", "");
-            String targetPhoneme = exerciseJson.getString("target_phoneme");
-            JSONArray exampleWordsArray = exerciseJson.getJSONArray("example_words");
+            Exercise exercise;
             
-            // 将示例单词数组转换为字符串
-            StringBuilder exampleWordsBuilder = new StringBuilder();
-            for (int j = 0; j < exampleWordsArray.length(); j++) {
-                if (j > 0) exampleWordsBuilder.append(", ");
-                exampleWordsBuilder.append(exampleWordsArray.getString(j));
+            // 根据练习格式选择相应的解析方法
+            if (exerciseJson.has("target_phoneme") && exerciseJson.has("example_words")) {
+                // 普通发音课程格式
+                exercise = parsePronunciationExercise(exerciseJson);
+            } else if (exerciseJson.has("original_text")) {
+                // 连读/弱读课程格式
+                exercise = parseLiaisonExercise(exerciseJson);
+            } else {
+                // 未知格式，使用基础解析
+                exercise = parseBasicExercise(exerciseJson);
             }
-            String exampleWords = exampleWordsBuilder.toString();
             
-            Exercise exercise = new Exercise(
-                exerciseId,
-                title,
-                targetPhoneme,
-                exampleWords,
-                "" // 音频路径暂时为空
-            );
-            
-            exercises.add(exercise);
+            if (exercise != null) {
+                exercises.add(exercise);
+            }
         }
         
         return exercises;
     }
     
     /**
+     * 解析普通发音课程的练习
+     */
+    private Exercise parsePronunciationExercise(JSONObject exerciseJson) throws JSONException {
+        String exerciseId = exerciseJson.getString("id");
+        String title = exerciseJson.getString("title");
+        String description = exerciseJson.optString("description", "");
+        String targetPhoneme = exerciseJson.getString("target_phoneme");
+        
+        // 解析示例单词数组
+        JSONArray exampleWordsArray = exerciseJson.getJSONArray("example_words");
+        StringBuilder exampleWordsBuilder = new StringBuilder();
+        for (int j = 0; j < exampleWordsArray.length(); j++) {
+            if (j > 0) exampleWordsBuilder.append(", ");
+            exampleWordsBuilder.append(exampleWordsArray.getString(j));
+        }
+        String exampleWords = exampleWordsBuilder.toString();
+        
+        // 获取音频文件路径
+        String audioPath = exerciseJson.optString("audio_reference", "");
+        
+        return new Exercise(exerciseId, title, targetPhoneme, exampleWords, audioPath);
+    }
+    
+    /**
+     * 解析连读/弱读课程的练习
+     */
+    private Exercise parseLiaisonExercise(JSONObject exerciseJson) throws JSONException {
+        String exerciseId = exerciseJson.getString("id");
+        String title = exerciseJson.getString("title");
+        String description = exerciseJson.optString("description", "");
+        
+        // 对于连读课程，使用original_text作为示例内容
+        String exampleWords = exerciseJson.getString("original_text");
+        
+        // 从original_phones中提取音素信息
+        String targetPhoneme = "连读练习";
+        try {
+            JSONArray originalPhones = exerciseJson.optJSONArray("original_phones");
+            if (originalPhones != null && originalPhones.length() > 0) {
+                StringBuilder phonemeBuilder = new StringBuilder();
+                for (int i = 0; i < originalPhones.length(); i++) {
+                    JSONArray wordPhones = originalPhones.getJSONArray(i);
+                    if (i > 0) phonemeBuilder.append(" ");
+                    for (int j = 0; j < wordPhones.length(); j++) {
+                        phonemeBuilder.append(wordPhones.getString(j));
+                    }
+                }
+                targetPhoneme = phonemeBuilder.toString();
+            }
+        } catch (JSONException e) {
+            // 如果解析音素失败，使用默认值
+            targetPhoneme = "连读练习";
+        }
+        
+        // 获取音频文件路径
+        String audioPath = exerciseJson.optString("audio_reference", "");
+        
+        return new Exercise(exerciseId, title, targetPhoneme, exampleWords, audioPath);
+    }
+    
+    /**
+     * 解析基础练习格式（兜底方案）
+     */
+    private Exercise parseBasicExercise(JSONObject exerciseJson) throws JSONException {
+        String exerciseId = exerciseJson.getString("id");
+        String title = exerciseJson.getString("title");
+        String description = exerciseJson.optString("description", "");
+        
+        // 基础解析，尽可能获取可用信息
+        String targetPhoneme = exerciseJson.optString("target_phoneme", 
+                                exerciseJson.optString("type", "unknown"));
+        String exampleWords = exerciseJson.optString("original_text", 
+                               exerciseJson.optString("content", ""));
+        String audioPath = exerciseJson.optString("audio_reference", "");
+        
+        return new Exercise(exerciseId, title, targetPhoneme, exampleWords, audioPath);
+    }
+    
+    /**
      * 解析子课程数据
      */
-    private List<Lesson> parseSubCourses(JSONObject lessonDataJson) throws JSONException {
+    private List<Lesson> parseSubCourses(JSONObject lessonDataJson, String mainCourseId) throws JSONException {
         List<Lesson> subCourses = new ArrayList<>();
         
         // 从JSON中获取sub_courses数组
@@ -253,8 +326,14 @@ public class LessonManager {
             }
             
             Lesson subCourse = new Lesson(subCourseId, title, description, category, difficulty, estimatedDuration, filePath);
+//            List<Exercise> exercises = parseExercises(lessonDataJson, subCourseId);
+//            subCourse.setExercises(exercises);
             subCourse.setType("lesson"); // 子课程默认为普通课程类型
+            subCourse.setParentCourseId(mainCourseId); // 设置父课程ID
             subCourses.add(subCourse);
+            
+            // 将子课程添加到lessonsMap中，以便后续可以通过ID获取
+            lessonsMap.put(subCourseId, subCourse);
         }
         
         return subCourses;
@@ -319,6 +398,7 @@ public class LessonManager {
         private int estimatedDuration;
         private String filePath;
         private String type; // 课程类型：lesson（普通课程）或 main_course（主课程）
+        private String parentCourseId; // 父课程ID（仅子课程使用）
         private List<Exercise> exercises;
         private List<Lesson> subCourses; // 子课程列表（仅主课程使用）
         private boolean detailsLoaded = false;
@@ -338,6 +418,7 @@ public class LessonManager {
             this.estimatedDuration = estimatedDuration;
             this.filePath = filePath;
             this.type = "lesson"; // 默认为普通课程
+            this.parentCourseId = null; // 默认无父课程
             this.exercises = new ArrayList<>();
             this.subCourses = new ArrayList<>();
         }
@@ -351,6 +432,7 @@ public class LessonManager {
         public int getEstimatedDuration() { return estimatedDuration; }
         public String getFilePath() { return filePath; }
         public String getType() { return type; }
+        public String getParentCourseId() { return parentCourseId; }
         public List<Exercise> getExercises() { return exercises; }
         public List<Lesson> getSubCourses() { return subCourses; }
         public boolean isDetailsLoaded() { return detailsLoaded; }
@@ -364,6 +446,7 @@ public class LessonManager {
         public void setExercises(List<Exercise> exercises) { this.exercises = exercises; }
         public void setSubCourses(List<Lesson> subCourses) { this.subCourses = subCourses; }
         public void setType(String type) { this.type = type; }
+        public void setParentCourseId(String parentCourseId) { this.parentCourseId = parentCourseId; }
         public void setDetailsLoaded(boolean detailsLoaded) { this.detailsLoaded = detailsLoaded; }
     }
     

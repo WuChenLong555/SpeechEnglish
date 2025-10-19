@@ -1,0 +1,42 @@
+[
+  {
+    "id": "lesson_001",
+    "title": "基础音素发音练习",
+    "description": "学习英语基础音素的正确发音方法",
+    "difficulty": "beginner",
+    "category": "pronunciation",
+    "subcategory": "phonemes",
+    "duration": "15分钟",
+    "file": "lessons/pronunciation/lesson_001.json"
+  },
+  {
+    "id": "lesson_002",
+    "title": "常见辅音组合练习",
+    "description": "掌握常见辅音组合的发音技巧",
+    "difficulty": "beginner",
+    "category": "pronunciation",
+    "subcategory": "consonants",
+    "duration": "20分钟",
+    "file": "lessons/pronunciation/lesson_002.json"
+  },
+  {
+    "id": "lesson_003",
+    "title": "元音发音对比训练",
+    "description": "区分相似元音的发音差异",
+    "difficulty": "intermediate",
+    "category": "pronunciation",
+    "subcategory": "vowels",
+    "duration": "25分钟",
+    "file": "lessons/pronunciation/lesson_003.json"
+  },
+  {
+    "id": "liaison_weak_skills",
+    "title": "连读和弱读技巧",
+    "description": "综合学习英语连读和弱读技巧，提高口语流畅度和自然度",
+    "category": "comprehensive",
+    "difficulty": "intermediate",
+    "duration": "60分钟",
+    "type": "main_course",
+    "file": "lessons/liaison/liaison_weak_skills.json"
+  }
+]

@@ -23,7 +23,7 @@ double getCurrentTime() {
 class Wav2Vec2 {
 public:
     ncnn::Net net;
-    ncnn::VulkanDevice* vkdev;
+    ncnn::VulkanDevice* vkdev = nullptr;
     ncnn::Net net_gpu;
     bool initialized = false;
     bool useGPU = false;
@@ -189,17 +189,7 @@ public:
         return true;
     }
 
-    Wav2Vec2() : vkdev(nullptr) {}
 
-    ~Wav2Vec2() {
-        if (vkdev) {
-            delete vkdev;
-            vkdev = nullptr;
-        }
-        if (useGPU) {
-            ncnn::destroy_gpu_instance();
-        }
-    }
 
     bool init(AAssetManager* mgr) {
         if (initialized) {
@@ -489,6 +479,9 @@ public:
         return lastOutput;
     }
 
+    // 新增方法：只进行推理，不返回复制的数据
+    bool processInference(const float* audioData, int audioLength);
+
     void destroy() {
         if (initialized) {
             net.clear();
@@ -546,11 +539,85 @@ public:
 //    }
 };
 
-// 在类外定义静态常量
 constexpr int Wav2Vec2::SAMPLE_RATE;
 constexpr int Wav2Vec2::FRAME_LENGTH;
 constexpr int Wav2Vec2::FRAME_SHIFT;
 constexpr int Wav2Vec2::FEATURE_DIM;
+
+// Wav2Vec2类方法的实现
+bool Wav2Vec2::processInference(const float* audioData, int audioLength) {
+    if (!initialized) {
+        LOGE("Wav2Vec2 model not initialized");
+        return false;
+    }
+
+    if (!audioData || audioLength <= 0) {
+        LOGE("Invalid audio data");
+        return false;
+    }
+
+    LOGI("Processing audio: length=%d", audioLength);
+    double startTime = getCurrentTime();
+
+    // 音频预处理
+    std::vector<float> processed = normalizeAudio(audioData, audioLength);
+    double preprocessTime = getCurrentTime();
+    LOGI("Audio preprocessing completed in %.2f ms", preprocessTime - startTime);
+
+    // 创建推理器
+    ncnn::Extractor ex = net.create_extractor();
+
+    if (useGPU) {
+        ex.set_vulkan_compute(true);
+    }
+    
+    // 创建输入Mat
+    ncnn::Mat in(processed.size(), processed.data(), sizeof(float), 1);
+    if (in.empty()) {
+        LOGE("Failed to create input Mat");
+        return false;
+    }
+
+    LOGI("Created input Mat: w=%d, h=%d, c=%d, dims=%d", in.w, in.h, in.c, in.dims);
+    
+    // 设置输入并执行推理
+    if(int ret = ex.input(wav2vec2::INPUT_LAYER, in)) {
+        LOGE("Failed to set input: %d", ret);
+        return false;
+    }
+
+    if(int ret = ex.extract(wav2vec2::OUTPUT_LAYER, lastOutput)) {
+        LOGE("Failed to extract output: %d", ret);
+        return false;
+    }
+    
+    double endTime = getCurrentTime();
+    double inferenceTimeMs = endTime - startTime;
+    LOGI("Inference completed in %.2f ms", inferenceTimeMs);
+
+    LOGI("Inference completed: output dimensions = [%d, %d, %d, %d]", 
+        lastOutput.w, lastOutput.h, lastOutput.c, lastOutput.dims);
+
+    if(lastOutput.empty()) {
+        LOGE("Output Mat is empty");
+        return false;
+    }
+
+    // 验证输出数据中的无效值
+    float* output_data = (float*)lastOutput.data;
+    int total_elements = lastOutput.w * lastOutput.h * lastOutput.c;
+    
+    for(int i = 0; i < total_elements; i++) {
+        if(std::isnan(output_data[i]) || std::isinf(output_data[i])) {
+            LOGE("Invalid output value at position %d: %f", i, output_data[i]);
+            output_data[i] = -std::numeric_limits<float>::infinity();  // 将无效值设为负无穷
+        }
+    }
+
+    return true;
+}
+
+
 
 extern "C" {
 

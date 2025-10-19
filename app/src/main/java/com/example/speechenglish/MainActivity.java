@@ -114,6 +114,13 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent);
         });
 
+        // 初始化发音质量检测按钮
+        Button pronunciationQualityButton = findViewById(R.id.pronunciation_quality_button);
+        pronunciationQualityButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, PronunciationQualityActivity.class);
+            startActivity(intent);
+        });
+
     }
 
     private void showProgress(boolean show) {

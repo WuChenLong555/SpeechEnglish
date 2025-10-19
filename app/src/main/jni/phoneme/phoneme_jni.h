@@ -20,9 +20,15 @@ public:
     
     // 分析音素并返回错误和优化后的得分
     static jobject nativeAnalyzePhonemes(
-        JNIEnv* env, jobject thiz, jlong handle,
-        jobjectArray wordSpans, jobjectArray words,
-        jfloatArray logits, jint vocabSize
+        JNIEnv* env, 
+        jobject thiz, 
+        jlong handle, 
+        jobjectArray jWords, 
+        jintArray jTargets, 
+        jfloatArray jAudioData, 
+        jint blankId, 
+        jintArray jWordPhoneCounts,
+        jobject assetManager
     );
 
 private:

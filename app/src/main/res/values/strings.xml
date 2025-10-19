@@ -1,3 +1,23 @@
 <resources>
     <string name="app_name">SpeechEnglish</string>
+    
+    <!-- 练习页面字符串 -->
+    <string name="exercise_title">发音练习</string>
+    <string name="original_text_label">原文</string>
+    <string name="phoneme_annotation_label">音素标注</string>
+    <string name="audio_playback_label">音频播放</string>
+    <string name="play_audio">播放音频</string>
+    <string name="pause_audio">暂停播放</string>
+    <string name="stop_audio">停止</string>
+    <string name="recording_label">录音练习</string>
+    <string name="start_recording">开始录音</string>
+    <string name="stop_recording">停止录音</string>
+    <string name="hold_to_record">按住录音</string>
+    <string name="hold_to_record_hint">按住按钮开始录音，松开即停止</string>
+    <string name="recording_hint">按住按钮开始录音，松开即停止</string>
+    <string name="recording_in_progress">正在录音...</string>
+    <string name="recording">正在录音...</string>
+    <string name="recording_completed">录音完成</string>
+    <string name="recording_complete">录音完成</string>
+    <string name="score_result_label">评分结果</string>
 </resources>

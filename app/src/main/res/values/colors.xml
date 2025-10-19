@@ -15,4 +15,12 @@
     <color name="orange_500">#FFFF9800</color>
     <color name="red_500">#FFF44336</color>
     <color name="blue_500">#FF2196F3</color>
+    
+    <!-- 练习页面颜色 -->
+    <color name="gray_50">#FFFAFAFA</color>
+    <color name="gray_100">#FFF5F5F5</color>
+    <color name="gray_300">#FFE0E0E0</color>
+    <color name="gray_800">#FF424242</color>
+    <color name="primary_blue">#FF1976D2</color>
+    <color name="accent_orange">#FFFF9800</color>
 </resources>

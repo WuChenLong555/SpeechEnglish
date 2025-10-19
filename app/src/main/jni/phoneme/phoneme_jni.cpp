@@ -1,7 +1,14 @@
 #include "phoneme_jni.h"
+#include "../force_aligner.h"
+#include "../wav2vec2_model.h"
+#include "../wav2vec2.h"
 #include <string>
 #include <vector>
 #include <android/log.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+#include "net.h"
+
 
 #define LOG_TAG "PhonemeJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -19,7 +26,7 @@ int PhonemeJNI::RegisterNatives(JNIEnv* env) {
     JNINativeMethod gMethods[] = {
         {"nativeCreate", "()J", (void*)PhonemeJNI::nativeCreate},
         {"nativeDestroy", "(J)V", (void*)PhonemeJNI::nativeDestroy},
-        {"nativeAnalyzePhonemes", "(J[[Ljava/lang/Object;[Ljava/lang/String;[FI)Lcom/speech/english/phoneme/PhonemeAnalysisResult;", 
+        {"nativeAnalyzePhonemes", "(J[Ljava/lang/String;[I[FI[ILandroid/content/res/AssetManager;)Lcom/speech/english/phoneme/PhonemeAnalysisResult;", 
          (void*)PhonemeJNI::nativeAnalyzePhonemes}
     };
 
@@ -49,62 +56,17 @@ void PhonemeJNI::nativeDestroy(JNIEnv* env, jobject thiz, jlong handle) {
     }
 }
 
-// 将Java的PhonemeSpan转换为C++的PhonemeSpan
-static PhonemeSpan convertPhonemeSpan(JNIEnv* env, jobject jSpan) {
-    jclass spanClass = env->GetObjectClass(jSpan);
-    
-    jfieldID tokenField = env->GetFieldID(spanClass, "token", "I");
-    jfieldID startField = env->GetFieldID(spanClass, "start", "I");
-    jfieldID endField = env->GetFieldID(spanClass, "end", "I");
-    jfieldID scoreField = env->GetFieldID(spanClass, "score", "F");
-    jfieldID textField = env->GetFieldID(spanClass, "text", "Ljava/lang/String;");
-    
-    PhonemeSpan span;
-    span.token = env->GetIntField(jSpan, tokenField);
-    span.start = env->GetIntField(jSpan, startField);
-    span.end = env->GetIntField(jSpan, endField);
-    span.score = env->GetFloatField(jSpan, scoreField);
-    
-    jstring jText = (jstring)env->GetObjectField(jSpan, textField);
-    const char* text = env->GetStringUTFChars(jText, nullptr);
-    span.text = text;
-    env->ReleaseStringUTFChars(jText, text);
-    
-    env->DeleteLocalRef(spanClass);
-    env->DeleteLocalRef(jText);
-    
-    return span;
-}
-
 // 分析音素并返回错误和优化后的得分
 jobject PhonemeJNI::nativeAnalyzePhonemes(
     JNIEnv* env, jobject thiz, jlong handle,
-    jobjectArray jWordSpans, jobjectArray jWords,
-    jfloatArray jLogits, jint vocabSize) {
+    jobjectArray jWords, jintArray jTargets,
+    jfloatArray jAudioData, jint blankId,
+    jintArray jWordPhoneCounts, jobject jAssetManager) {
     
     PhonemeAnalyzer* analyzer = reinterpret_cast<PhonemeAnalyzer*>(handle);
     if (!analyzer) {
         LOGE("音素分析器为空");
         return nullptr;
-    }
-    
-    // 转换wordSpans
-    std::vector<std::vector<PhonemeSpan>> wordSpans;
-    jsize wordSpansLength = env->GetArrayLength(jWordSpans);
-    
-    for (jsize i = 0; i < wordSpansLength; i++) {
-        jobjectArray jWordSpan = (jobjectArray)env->GetObjectArrayElement(jWordSpans, i);
-        jsize spanLength = env->GetArrayLength(jWordSpan);
-        
-        std::vector<PhonemeSpan> spans;
-        for (jsize j = 0; j < spanLength; j++) {
-            jobject jSpan = env->GetObjectArrayElement(jWordSpan, j);
-            spans.push_back(convertPhonemeSpan(env, jSpan));
-            env->DeleteLocalRef(jSpan);
-        }
-        
-        wordSpans.push_back(spans);
-        env->DeleteLocalRef(jWordSpan);
     }
     
     // 转换words
@@ -119,16 +81,125 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
         env->DeleteLocalRef(jWord);
     }
     
-    // 转换logits
-    std::vector<float> logits;
-    jfloat* logitsArray = env->GetFloatArrayElements(jLogits, nullptr);
-    jsize logitsLength = env->GetArrayLength(jLogits);
+    // 转换targets
+    std::vector<int> targets;
+    jint* targetsArray = env->GetIntArrayElements(jTargets, nullptr);
+    jsize targetsLength = env->GetArrayLength(jTargets);
     
-    for (jsize i = 0; i < logitsLength; i++) {
-        logits.push_back(logitsArray[i]);
+    for (jsize i = 0; i < targetsLength; i++) {
+        targets.push_back(targetsArray[i]);
+    }
+    env->ReleaseIntArrayElements(jTargets, targetsArray, JNI_ABORT);
+    
+    // 转换audioData
+    std::vector<float> audioData;
+    jfloat* audioArray = env->GetFloatArrayElements(jAudioData, nullptr);
+    jsize audioLength = env->GetArrayLength(jAudioData);
+    
+    for (jsize i = 0; i < audioLength; i++) {
+        audioData.push_back(audioArray[i]);
+    }
+    env->ReleaseFloatArrayElements(jAudioData, audioArray, JNI_ABORT);
+    
+    // 转换wordPhoneCounts
+    std::vector<int> wordPhoneCounts;
+    jint* wordPhoneCountsArray = env->GetIntArrayElements(jWordPhoneCounts, nullptr);
+    jsize wordPhoneCountsLength = env->GetArrayLength(jWordPhoneCounts);
+    
+    for (jsize i = 0; i < wordPhoneCountsLength; i++) {
+        wordPhoneCounts.push_back(wordPhoneCountsArray[i]);
+    }
+    env->ReleaseIntArrayElements(jWordPhoneCounts, wordPhoneCountsArray, JNI_ABORT);
+    
+    // 转换AssetManager
+    AAssetManager* assetManager = AAssetManager_fromJava(env, jAssetManager);
+    if (!assetManager) {
+        LOGE("AssetManager转换失败");
+        return nullptr;
     }
     
-    env->ReleaseFloatArrayElements(jLogits, logitsArray, JNI_ABORT);
+    // 初始化Wav2Vec2模型
+    Wav2Vec2 wav2vec2Model;
+    if (!wav2vec2Model.init(assetManager)) {
+        LOGE("Wav2Vec2模型初始化失败");
+        return nullptr;
+    }
+    
+    // 使用Wav2Vec2进行推理
+    bool inferenceSuccess = wav2vec2Model.processInference(audioData.data(), audioData.size());
+    if (!inferenceSuccess) {
+        LOGE("Wav2Vec2推理失败");
+        return nullptr;
+    }
+    
+    // 获取模型输出用于强制对齐和音素分析
+    const ncnn::Mat& modelOutput = wav2vec2Model.getLastOutput();
+    int vocabSize = wav2vec2::OutputConfig::NUM_TOKENS;
+    int timeSteps = modelOutput.w;
+    
+    // blankId兜底处理
+    int actualBlankId = blankId;
+    if (actualBlankId < 0 || actualBlankId >= vocabSize) {
+        actualBlankId = 0;
+        LOGI("使用默认blankId: %d", actualBlankId);
+    }
+    
+    // 直接使用lastOutput进行强制对齐
+    speech::alignment::AlignmentResult alignResult = 
+        speech::alignment::ForceAligner::align(modelOutput, targets, actualBlankId);
+    
+    if (alignResult.empty()) {
+        LOGE("强制对齐失败");
+        return nullptr;
+    }
+    
+    // 根据wordPhoneCounts切分segments为wordSpans
+    std::vector<std::vector<PhonemeSpan>> wordSpans;
+    
+    // 检查边界
+    int totalPhonemes = 0;
+    for (int count : wordPhoneCounts) {
+        totalPhonemes += count;
+    }
+    
+    if (totalPhonemes > (int)alignResult.segments.size()) {
+        LOGE("wordPhoneCounts总和(%d)超过segments数量(%zu)", totalPhonemes, alignResult.segments.size());
+        return nullptr;
+    }
+    
+    // 按wordPhoneCounts切分segments
+    int segmentIndex = 0;
+    for (size_t wordIdx = 0; wordIdx < wordPhoneCounts.size(); wordIdx++) {
+        std::vector<PhonemeSpan> spans;
+        
+        for (int phoneIdx = 0; phoneIdx < wordPhoneCounts[wordIdx]; phoneIdx++) {
+            if (segmentIndex >= (int)alignResult.segments.size()) {
+                LOGE("segmentIndex越界: %d >= %zu", segmentIndex, alignResult.segments.size());
+                return nullptr;
+            }
+            
+            const auto& segment = alignResult.segments[segmentIndex];
+            
+            PhonemeSpan span;
+            span.token = segment.token;
+            span.start = segment.startFrame;
+            span.end = segment.endFrame;
+            span.score = segment.scoreMean;
+            
+            // 填充span.text (需要tokenMapper，这里暂时留空)
+            span.text = "";
+            
+            spans.push_back(span);
+            segmentIndex++;
+        }
+        
+        wordSpans.push_back(spans);
+    }
+    
+    // 直接从modelOutput构造logits向量，避免重复复制
+    int totalElements = vocabSize * timeSteps;
+    std::vector<float> logits(totalElements);
+    memcpy(logits.data(), modelOutput.data, totalElements * sizeof(float));
     
     // 分析音素
     PhonemeAnalysisResult result = analyzer->analyzePhonemes(wordSpans, words, logits, vocabSize);
@@ -198,8 +269,9 @@ extern "C" JNIEXPORT void JNICALL Java_com_speech_english_phoneme_PhonemeAnalyze
 }
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_speech_english_phoneme_PhonemeAnalyzer_nativeAnalyzePhonemes(
-    JNIEnv* env, jobject thiz, jlong handle, jobjectArray wordSpans, jobjectArray words, jfloatArray logits, jint vocabSize) {
-    return phoneme::PhonemeJNI::nativeAnalyzePhonemes(env, thiz, handle, wordSpans, words, logits, vocabSize);
+    JNIEnv* env, jobject thiz, jlong handle, jobjectArray words, jintArray targets, 
+    jfloatArray audioData, jint blankId, jintArray wordPhoneCounts, jobject jAssetManager) {
+    return phoneme::PhonemeJNI::nativeAnalyzePhonemes(env, thiz, handle, words, targets, audioData, blankId, wordPhoneCounts, jAssetManager);
 }
 
 // JNI加载函数

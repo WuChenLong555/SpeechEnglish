@@ -14,7 +14,8 @@
       "category": "liaison",
       "difficulty": "beginner",
       "duration": "15分钟",
-      "file": "CONSONANT_VOWEL/CONSONANT_VOWEL.json"
+      "type": "sub_course",
+      "file": "lessons/liaison/CONSONANT_VOWEL/CONSONANT_VOWEL.json"
     },
     {
       "id": "H_DROPPING",
@@ -23,7 +24,8 @@
       "category": "liaison",
       "difficulty": "intermediate",
       "duration": "12分钟",
-      "file": "H_DROPPING/H_DROPPING.json"
+      "type": "sub_course",
+      "file": "lessons/liaison/H_DROPPING/H_DROPPING.json"
     }
   ]
 }

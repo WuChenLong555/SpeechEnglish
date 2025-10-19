@@ -1,57 +1,329 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/white">
+    android:background="@color/gray_50">
 
-    <!-- 标题栏 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:background="@color/purple_500"
-        android:padding="16dp">
-        
-        <TextView
-            android:id="@+id/lesson_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="课程标题"
-            android:textColor="@color/white"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-            
-    </LinearLayout>
-
-    <!-- 主要内容区域 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
         android:orientation="vertical"
-        android:gravity="center"
-        android:padding="32dp">
+        android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- 标题栏 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="练习界面开发中..."
-            android:textColor="@color/gray_600"
-            android:textSize="18sp"
-            android:gravity="center" />
+            android:orientation="horizontal"
+            android:background="@drawable/rounded_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
             
-        <TextView
-            android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/lesson_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/exercise_title"
+                android:textColor="@color/gray_800"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+                
+        </LinearLayout>
+
+        <!-- 练习导航和进度显示区域 -->
+        <LinearLayout
+            android:id="@+id/exercise_navigation_layout"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="这里将实现发音评估、音素对齐等功能"
-            android:textColor="@color/gray_500"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:maxLines="3"
-            android:ellipsize="end" />
-            
+            android:orientation="vertical"
+            android:background="@drawable/rounded_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <!-- 练习进度显示 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="练习进度："
+                    android:textColor="@color/gray_600"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/exercise_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1/6"
+                    android:textColor="@color/primary_blue"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="8dp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/course_completion_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="完成度: 16%"
+                    android:textColor="@color/gray_600"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- 练习导航按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_previous_exercise"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="上一个"
+                    android:textColor="@color/gray_600"
+                    android:background="@drawable/button_secondary"
+                    android:padding="12dp"
+                    android:minWidth="80dp"
+                    android:enabled="false" />
+
+                <TextView
+                    android:id="@+id/current_exercise_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="当前练习"
+                    android:textColor="@color/gray_800"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:layout_marginHorizontal="16dp"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+
+                <Button
+                    android:id="@+id/btn_next_exercise"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="下一个"
+                    android:textColor="@android:color/white"
+                    android:background="@drawable/button_primary"
+                    android:padding="12dp"
+                    android:minWidth="80dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 原文显示区域 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_background"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/original_text_label"
+                android:textColor="@color/gray_600"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/original_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Hello, how are you today?"
+                android:textColor="@color/gray_800"
+                android:textSize="18sp"
+                android:lineSpacingExtra="4dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/phoneme_annotation_label"
+                android:textColor="@color/gray_600"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/phoneme_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="/həˈloʊ, haʊ ɑr ju təˈdeɪ/"
+                android:textColor="@color/primary_blue"
+                android:textSize="16sp"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <!-- 音频播放控制区域 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_background"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/audio_playback_label"
+                android:textColor="@color/gray_600"
+                android:textSize="14sp"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_play_pause"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/button_primary"
+                    android:drawableTop="@drawable/ic_play"
+                    android:drawablePadding="0dp"
+                    android:textColor="@android:color/white"
+                    android:textSize="0sp"
+                    android:gravity="center"
+                    android:padding="12dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 录音控制区域 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_background"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/recording_label"
+                android:textColor="@color/gray_600"
+                android:textSize="14sp"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_record"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/button_record"
+                    android:drawableTop="@drawable/ic_mic"
+                    android:drawablePadding="0dp"
+                    android:gravity="center"
+                    android:padding="12dp"
+                    android:textColor="@android:color/white"
+                    android:textSize="0sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hold_to_record_hint"
+                    android:textColor="@color/gray_600"
+                    android:textSize="12sp"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 评分结果区域 -->
+        <LinearLayout
+            android:id="@+id/score_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_background"
+            android:padding="20dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/score_result_label"
+                android:textColor="@color/gray_600"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/score_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="85分"
+                android:textColor="@color/accent_orange"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 练习完成后的操作按钮 -->
+            <LinearLayout
+                android:id="@+id/exercise_completion_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <Button
+                    android:id="@+id/btn_retry_exercise"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="重新练习"
+                    android:textColor="@color/gray_600"
+                    android:background="@drawable/button_secondary"
+                    android:padding="12dp"
+                    android:layout_marginEnd="16dp" />
+
+                <Button
+                    android:id="@+id/btn_continue_next"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="继续下一个"
+                    android:textColor="@android:color/white"
+                    android:background="@drawable/button_primary"
+                    android:padding="12dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
     </LinearLayout>
 
-</LinearLayout>
+</ScrollView>

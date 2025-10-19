@@ -418,7 +418,7 @@ void PhonemeAnalyzer::handleNasalization(
             float nasalProb = getPhonemeLogitScore(nasalizedPhoneme, phoneSpan.start, phoneSpan.end, logits, vocabSize);
             
             // 如果替代音素的概率较高，则认为发生了鼻音化
-            constexpr float NASALIZATION_THRESHOLD = 0.4f;
+            constexpr float NASALIZATION_THRESHOLD = 0.5f;
             if (nasalProb > 0.0f && (nasalProb + nProb) > NASALIZATION_THRESHOLD) {
                 // 将音素得分设为两者概率之和
                 phoneSpan.score = std::min(MAX_SCORE, nasalProb + nProb);

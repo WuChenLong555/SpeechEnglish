@@ -12,7 +12,7 @@ static const std::unordered_set<std::string>& make_set(std::initializer_list<con
 
 const std::unordered_set<std::string>& PhoneSets::vowels() {
     static const auto& s = make_set({
-        "i:", "i", "ɪ", "e", "æ", "ʌ", "ɜː", "ɜ", "ə",
+        "i:", "i", "ɪ", "e", "æ", "ʌ", "ɜː", "ɜ",
         "u:", "u", "ʊ", "ɔː", "ɔ", "ɒ", "ɑː", "ɑ", "ɐ", "ɛ"
     });
     return s;

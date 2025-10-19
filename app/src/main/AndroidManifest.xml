@@ -77,6 +77,51 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait"/>
 
+        <activity
+            android:name=".LessonSelectionActivity"
+            android:exported="false"
+            android:label="课程选择"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait"/>
+
+        <activity
+            android:name=".SubCourseActivity"
+            android:exported="false"
+            android:label="子课程选择"
+            android:parentActivityName=".LessonSelectionActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".LessonSelectionActivity" />
+        </activity>
+
+        <activity
+            android:name=".ExerciseActivity"
+            android:exported="false"
+            android:label="练习"
+            android:parentActivityName=".SubCourseActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".SubCourseActivity" />
+        </activity>
+
+        <activity
+            android:name=".LessonTestActivity"
+            android:exported="false"
+            android:label="课程测试"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait"/>
+
+        <activity
+            android:name=".PronunciationQualityActivity"
+            android:exported="false"
+            android:label="发音质量检测"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait"/>
+
     </application>
 
 </manifest>

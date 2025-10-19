@@ -101,28 +101,14 @@ public class LessonSelectionActivity extends AppCompatActivity {
         
         // 检查是否是主课程
         if (lesson.isMainCourse()) {
-            // 主课程：加载子课程列表
-            showLoading(true);
+            // 主课程：启动子课程选择界面
+            Intent intent = new Intent(LessonSelectionActivity.this, SubCourseActivity.class);
+            intent.putExtra("main_course_id", lesson.getLessonId());
+            intent.putExtra("main_course_title", lesson.getTitle());
+            startActivity(intent);
             
-            new Thread(() -> {
-                try {
-                    LessonManager.Lesson detailedLesson = lessonManager.loadLessonDetails(lesson.getLessonId());
-                    
-                    runOnUiThread(() -> {
-                        showLoading(false);
-                        
-                        // 显示子课程选择界面
-                        showSubCourses(detailedLesson);
-                    });
-                    
-                } catch (Exception e) {
-                    Log.e(TAG, "加载主课程详细数据失败: " + lesson.getLessonId(), e);
-                    runOnUiThread(() -> {
-                        showLoading(false);
-                        showError("课程数据加载失败，请重试");
-                    });
-                }
-            }).start();
+            // 添加进入动画
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
         } else {
             // 普通课程：直接进入练习界面
             showLoading(true);
@@ -138,6 +124,8 @@ public class LessonSelectionActivity extends AppCompatActivity {
                         Intent intent = new Intent(LessonSelectionActivity.this, ExerciseActivity.class);
                         intent.putExtra("lesson_id", detailedLesson.getLessonId());
                         intent.putExtra("lesson_title", detailedLesson.getTitle());
+                        intent.putExtra("from_activity", "LessonSelectionActivity");
+                        intent.putExtra("is_sub_course", false);
                         startActivity(intent);
                         
                         // 添加进入动画
@@ -153,59 +141,6 @@ public class LessonSelectionActivity extends AppCompatActivity {
                 }
             }).start();
         }
-    }
-    
-    /**
-     * 显示子课程选择界面
-     */
-    private void showSubCourses(LessonManager.Lesson mainCourse) {
-        List<LessonManager.Lesson> subCourses = mainCourse.getSubCourses();
-        
-        if (subCourses.isEmpty()) {
-            showError("该主课程暂无子课程");
-            return;
-        }
-        
-        // 更新界面显示子课程
-        lessonAdapter.updateLessons(subCourses);
-        
-        // 更新标题栏显示主课程名称
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(mainCourse.getTitle());
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        }
-        
-        // 修改点击监听器，让子课程点击进入练习界面
-        lessonAdapter.setOnLessonClickListener(subCourse -> {
-            // 子课程点击：直接进入练习界面
-            showLoading(true);
-            
-            new Thread(() -> {
-                try {
-                    LessonManager.Lesson detailedSubCourse = lessonManager.loadLessonDetails(subCourse.getLessonId());
-                    
-                    runOnUiThread(() -> {
-                        showLoading(false);
-                        
-                        // 启动练习界面
-                        Intent intent = new Intent(LessonSelectionActivity.this, ExerciseActivity.class);
-                        intent.putExtra("lesson_id", detailedSubCourse.getLessonId());
-                        intent.putExtra("lesson_title", detailedSubCourse.getTitle());
-                        startActivity(intent);
-                        
-                        // 添加进入动画
-                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                    });
-                    
-                } catch (Exception e) {
-                    Log.e(TAG, "加载子课程详细数据失败: " + subCourse.getLessonId(), e);
-                    runOnUiThread(() -> {
-                        showLoading(false);
-                        showError("子课程数据加载失败，请重试");
-                    });
-                }
-            }).start();
-        });
     }
     
     private void showLoading(boolean show) {
@@ -229,7 +164,7 @@ public class LessonSelectionActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // 每次返回时刷新界面状态
+        // 每次返回时刷新主课程列表
         if (lessonManager != null && lessonManager.isInitialized()) {
             loadLessons();
         }
@@ -238,45 +173,9 @@ public class LessonSelectionActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
-            // 检查当前是否在显示子课程列表
-            if (isShowingSubCourses()) {
-                // 返回主课程列表
-                showMainCourseList();
-                return true;
-            } else {
-                finish();
-                return true;
-            }
+            finish();
+            return true;
         }
         return super.onOptionsItemSelected(item);
-    }
-    
-    /**
-     * 检查当前是否显示子课程列表
-     */
-    private boolean isShowingSubCourses() {
-        // 检查当前显示的课程列表是否包含子课程
-        // 这里可以添加更复杂的逻辑来判断当前状态
-        return getSupportActionBar() != null && 
-               getSupportActionBar().isShowing() && 
-               getSupportActionBar().getTitle() != null &&
-               !getSupportActionBar().getTitle().toString().equals("课程选择");
-    }
-    
-    /**
-     * 显示主课程列表
-     */
-    private void showMainCourseList() {
-        // 重新加载主课程列表
-        loadLessons();
-        
-        // 恢复标题栏
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle("课程选择");
-            getSupportActionBar().setDisplayHomeAsUpEnabled(false);
-        }
-        
-        // 恢复主课程的点击监听器
-        lessonAdapter.setOnLessonClickListener(this::onLessonSelected);
     }
 }
