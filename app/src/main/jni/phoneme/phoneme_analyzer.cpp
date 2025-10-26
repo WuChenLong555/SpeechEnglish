@@ -5,6 +5,7 @@
 #include <cmath>
 #include <unordered_set>
 #include <__numeric/accumulate.h>
+#include <android/log.h>
 
 namespace phoneme {
 
@@ -15,6 +16,9 @@ constexpr float MAX_SCORE = 1.0f;
 
 PhonemeAnalyzer::PhonemeAnalyzer() {
     initAssimilationMap();
+    // 初始化Token映射，确保后续ID↔音素文本转换可用
+    tokenMapper_.initialize();
+    __android_log_print(ANDROID_LOG_INFO, "PhonemeAnalyzer", "TokenMapper initialized: %d, size=%zu", tokenMapper_.isInitialized(), tokenMapper_.size());
 }
 
 // 从logits中获取特定音素的概率
@@ -36,7 +40,7 @@ float PhonemeAnalyzer::getPhonemeLogitScore(
     startFrame = std::max(0, startFrame);
     endFrame = std::min(static_cast<int>(logits.size() / vocabSize), endFrame);
     
-    if (startFrame >= endFrame) {
+    if (startFrame > endFrame) {
         return 0.0f;
     }
     
@@ -368,7 +372,7 @@ void PhonemeAnalyzer::handleSHLinking(
     float timeEnd) {
     
     // 计算目标音素's'和替代音素'ʃ'的概率
-    float sProb = phoneSpan.score;   
+    float sProb = phoneSpan.score;
     float shProb = getPhonemeLogitScore("ʃ", phoneSpan.start, phoneSpan.end, logits, vocabSize);
     
     // 如果'ʃ'的概率加上's'的概率大于阈值（如0.5），则认为确实发生了SUBSTITUTION_SH_LINKING

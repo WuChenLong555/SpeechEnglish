@@ -1,10 +1,6 @@
 package com.example.speechenglish;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.media.MediaRecorder;
+
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,7 +14,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
+
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -27,13 +23,24 @@ import com.speech.english.phoneme.PhonemeAnalysisResult;
 import com.speech.english.phoneme.PhonemeAnalyzer;
 import com.speech.english.phoneme.PhonemeError;
 
-import java.io.File;
-import java.io.FileOutputStream;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import android.content.res.AssetManager;
+import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * 发音质量检测Activity
@@ -42,14 +49,11 @@ import java.util.concurrent.Executors;
 public class PronunciationQualityActivity extends AppCompatActivity {
     
     private static final String TAG = "PronunciationQuality";
-    private static final int PERMISSION_REQUEST_CODE = 1001;
+
     
     // UI组件
     private EditText etTargetText;
-    private Button btnRecord;
     private Button btnAnalyze;
-    private TextView tvRecordingStatus;
-    private TextView tvRecordingDuration;
     private TextView tvOverallScore;
     private TextView tvMinorErrors;
     private TextView tvModerateErrors;
@@ -60,22 +64,13 @@ public class PronunciationQualityActivity extends AppCompatActivity {
     private View cardErrorList;
     private RecyclerView rvPronunciationErrors;
     
-    // 音频录制参数
-    private static final int SAMPLE_RATE = 16000;
-    private static final int CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
-    private static final int AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int BUFFER_SIZE = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT);
-    
-    // 录音和分析相关
-    private AudioRecord audioRecord;
-    private boolean isRecording = false;
-    private File audioFile;
+    // 分析相关（已移除录音）
     private Handler mainHandler;
     private ExecutorService executorService;
     private PhonemeAnalyzer phonemeAnalyzer;
     private PronunciationErrorAdapter errorAdapter;
-    private long recordingStartTime;
-    private Runnable durationUpdateRunnable;
+    // 新增：音素映射器
+    private PhonemeMapper phonemeMapper;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,30 +79,17 @@ public class PronunciationQualityActivity extends AppCompatActivity {
         
         initViews();
         initComponents();
-        checkPermissions();
         setupClickListeners();
     }
 
     /**
      * 从音频文件加载音频数据
      */
-    private float[] loadAudioData(File audioFile) {
-        try {
-            // 这里应该实现实际的音频文件读取逻辑
-            // 暂时返回空数组作为占位符
-            return new float[0];
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load audio data", e);
-            return new float[0];
-        }
-    }
+
     
     private void initViews() {
         etTargetText = findViewById(R.id.et_target_text);
-        btnRecord = findViewById(R.id.btn_record);
         btnAnalyze = findViewById(R.id.btn_analyze);
-        tvRecordingStatus = findViewById(R.id.tv_recording_status);
-        tvRecordingDuration = findViewById(R.id.tv_recording_duration);
         tvOverallScore = findViewById(R.id.tv_overall_score);
         tvMinorErrors = findViewById(R.id.tv_minor_errors);
         tvModerateErrors = findViewById(R.id.tv_moderate_errors);
@@ -122,6 +104,8 @@ public class PronunciationQualityActivity extends AppCompatActivity {
         rvPronunciationErrors.setLayoutManager(new LinearLayoutManager(this));
         errorAdapter = new PronunciationErrorAdapter(new ArrayList<>());
         rvPronunciationErrors.setAdapter(errorAdapter);
+        // 确保分析按钮默认可点击
+        if (btnAnalyze != null) btnAnalyze.setEnabled(true);
     }
     
     private void initComponents() {
@@ -135,285 +119,53 @@ public class PronunciationQualityActivity extends AppCompatActivity {
             Log.e(TAG, "Failed to initialize PhonemeAnalyzer", e);
             Toast.makeText(this, "初始化音素分析器失败", Toast.LENGTH_SHORT).show();
         }
-    }
-    
-    private void checkPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, 
-                new String[]{Manifest.permission.RECORD_AUDIO}, 
-                PERMISSION_REQUEST_CODE);
+        // 新增：初始化音素映射器
+        try {
+            phonemeMapper = new PhonemeMapper(getAssets());
+        } catch (IOException e) {
+            Log.e(TAG, "初始化PhonemeMapper失败", e);
+            Toast.makeText(this, "加载音素词表失败", Toast.LENGTH_SHORT).show();
         }
     }
     
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, 
-                                         @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "录音权限已授予", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "需要录音权限才能使用此功能", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
+
     
     private void setupClickListeners() {
-        btnRecord.setOnClickListener(v -> {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        });
-        
+        // 仅保留分析按钮
         btnAnalyze.setOnClickListener(v -> analyzeRecording());
     }
     
-    private void startRecording() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
-                != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "请先授予录音权限", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        try {
-            // 创建音频文件
-            audioFile = new File(getCacheDir(), "recording_" + System.currentTimeMillis() + ".wav");
-            
-            // 初始化AudioRecord
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, 
-                SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT, BUFFER_SIZE);
-            
-            if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-                Toast.makeText(this, "录音初始化失败", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            
-            isRecording = true;
-            recordingStartTime = System.currentTimeMillis();
-            
-            // 更新UI
-            btnRecord.setText("停止录音");
-            btnRecord.setBackgroundResource(R.drawable.button_secondary);
-            btnAnalyze.setEnabled(false);
-            tvRecordingStatus.setText("正在录音...");
-            tvRecordingStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark));
-            cardResults.setVisibility(View.GONE);
-            cardErrorList.setVisibility(View.GONE);
-            
-            // 开始录音
-            audioRecord.startRecording();
-            
-            // 在后台线程中处理录音数据
-            executorService.execute(this::recordAudioData);
-            
-            // 开始更新录音时长
-            updateRecordingDuration();
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to start recording", e);
-            Toast.makeText(this, "开始录音失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
+
     
-    private void recordAudioData() {
-        byte[] buffer = new byte[BUFFER_SIZE];
-        List<byte[]> audioDataList = new ArrayList<>();
-        
-        try {
-            while (isRecording && audioRecord != null) {
-                int bytesRead = audioRecord.read(buffer, 0, buffer.length);
-                if (bytesRead > 0) {
-                    byte[] data = new byte[bytesRead];
-                    System.arraycopy(buffer, 0, data, 0, bytesRead);
-                    audioDataList.add(data);
-                }
-            }
-            
-            // 保存音频数据到文件
-            saveAudioToFile(audioDataList);
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Error recording audio data", e);
-            mainHandler.post(() -> {
-                Toast.makeText(this, "录音数据处理失败", Toast.LENGTH_SHORT).show();
-            });
-        }
-    }
+
     
-    private void stopRecording() {
-        if (!isRecording || audioRecord == null) {
-            return;
-        }
-        
-        isRecording = false;
-        
-        try {
-            audioRecord.stop();
-            audioRecord.release();
-            audioRecord = null;
-            
-            // 停止时长更新
-            if (durationUpdateRunnable != null) {
-                mainHandler.removeCallbacks(durationUpdateRunnable);
-            }
-            
-            // 更新UI
-            btnRecord.setText("开始录音");
-            btnRecord.setBackgroundResource(R.drawable.button_primary);
-            btnAnalyze.setEnabled(true);
-            tvRecordingStatus.setText("录音完成");
-            tvRecordingStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
-            
-            Toast.makeText(this, "录音已保存", Toast.LENGTH_SHORT).show();
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to stop recording", e);
-            Toast.makeText(this, "停止录音失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
+
     
     private void analyzeRecording() {
-        if (audioFile == null || !audioFile.exists()) {
-            Toast.makeText(this, "请先录音", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        String targetText = etTargetText.getText().toString().trim();
-        if (targetText.isEmpty()) {
-            Toast.makeText(this, "请输入目标文本", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        // 显示进度
-        showProgress("正在分析发音...");
-        
-        // 在后台线程中进行分析
-        executorService.execute(() -> {
-            try {
-                // 准备分析参数
-                String[] words = targetText.split("\\s+");
-                
-                // 从录音文件读取音频数据
-                float[] audioData = loadAudioData(audioFile);
-                
-                // 这里需要根据实际情况准备其他参数
-                // 暂时使用简化的调用方式
-                PhonemeAnalysisResult result = phonemeAnalyzer.analyzePhonemes(
-                    words,
-                    new int[0], // targets - 需要从文本转换得到
-                    audioData,
-                    0, // blankId
-                    new int[words.length], // wordPhoneCounts
-                    getAssets()
-                );
-                
-                // 在主线程中更新UI
-                mainHandler.post(() -> {
-                    hideProgress();
-                    displayAnalysisResult(result);
-                });
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to analyze pronunciation", e);
-                mainHandler.post(() -> {
-                    hideProgress();
-                    Toast.makeText(this, "分析失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        });
+        // 直接分析资产示例练习
+        long __startMs = android.os.SystemClock.elapsedRealtime();
+        analyzeExerciseFromAssets("lessons/liaison/CONSONANT_VOWEL/CONSONANT_VOWEL.json");
+        long __endMs = android.os.SystemClock.elapsedRealtime();
+        android.util.Log.i("PronunciationQualityActivity", "analyzeExerciseFromAssets耗时: " + (__endMs - __startMs) + " ms");
     }
     
-    private void saveAudioToFile(List<byte[]> audioDataList) {
-        try (FileOutputStream fos = new FileOutputStream(audioFile)) {
-            // 写入WAV文件头
-            writeWavHeader(fos, audioDataList);
-            
-            // 写入音频数据
-            for (byte[] data : audioDataList) {
-                fos.write(data);
-            }
-            
-            Log.d(TAG, "Audio saved to: " + audioFile.getAbsolutePath());
-            
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to save audio file", e);
-            mainHandler.post(() -> {
-                Toast.makeText(this, "保存音频文件失败", Toast.LENGTH_SHORT).show();
-            });
-        }
-    }
+
     
-    private void writeWavHeader(FileOutputStream fos, List<byte[]> audioDataList) throws IOException {
-        // 计算数据长度
-        int dataLength = 0;
-        for (byte[] data : audioDataList) {
-            dataLength += data.length;
-        }
-        
-        int fileLength = dataLength + 36;
-        
-        // WAV文件头
-        fos.write("RIFF".getBytes());
-        fos.write(intToByteArray(fileLength), 0, 4);
-        fos.write("WAVE".getBytes());
-        fos.write("fmt ".getBytes());
-        fos.write(intToByteArray(16), 0, 4); // PCM格式长度
-        fos.write(shortToByteArray((short) 1), 0, 2); // PCM格式
-        fos.write(shortToByteArray((short) 1), 0, 2); // 单声道
-        fos.write(intToByteArray(SAMPLE_RATE), 0, 4); // 采样率
-        fos.write(intToByteArray(SAMPLE_RATE * 2), 0, 4); // 字节率
-        fos.write(shortToByteArray((short) 2), 0, 2); // 块对齐
-        fos.write(shortToByteArray((short) 16), 0, 2); // 位深度
-        fos.write("data".getBytes());
-        fos.write(intToByteArray(dataLength), 0, 4);
-    }
+
     
-    private byte[] intToByteArray(int value) {
-        return new byte[] {
-            (byte) (value & 0xff),
-            (byte) ((value >> 8) & 0xff),
-            (byte) ((value >> 16) & 0xff),
-            (byte) ((value >> 24) & 0xff)
-        };
-    }
-    
-    private byte[] shortToByteArray(short value) {
-        return new byte[] {
-            (byte) (value & 0xff),
-            (byte) ((value >> 8) & 0xff)
-        };
-    }
-    
-    private void updateRecordingDuration() {
-        durationUpdateRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isRecording) {
-                    long duration = (System.currentTimeMillis() - recordingStartTime) / 1000;
-                    tvRecordingDuration.setText(String.format("%02d:%02d", duration / 60, duration % 60));
-                    mainHandler.postDelayed(this, 1000);
-                }
-            }
-        };
-        mainHandler.post(durationUpdateRunnable);
-    }
+
     
     private void showProgress(String message) {
         progressBar.setVisibility(View.VISIBLE);
         tvProgressText.setVisibility(View.VISIBLE);
         tvProgressText.setText(message);
         btnAnalyze.setEnabled(false);
-        btnRecord.setEnabled(false);
     }
     
     private void hideProgress() {
         progressBar.setVisibility(View.GONE);
         tvProgressText.setVisibility(View.GONE);
         btnAnalyze.setEnabled(true);
-        btnRecord.setEnabled(true);
     }
     
     private void displayAnalysisResult(PhonemeAnalysisResult result) {
@@ -532,20 +284,207 @@ public class PronunciationQualityActivity extends AppCompatActivity {
         }
         tvOverallScore.setTextColor(color);
     }
-    
+
+    // 从assets加载WAV音频为float数组（16kHz、单声道、16位）
+    private float[] loadAudioFromAssets(String assetPath) {
+        try {
+            AssetManager am = getAssets();
+            InputStream is = am.open(assetPath);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int read;
+            while ((read = is.read(buf)) != -1) {
+                baos.write(buf, 0, read);
+            }
+            is.close();
+            byte[] bytes = baos.toByteArray();
+
+            if (bytes.length < 44 || !isValidWavHeader(bytes)) {
+                throw new IOException("无效的WAV文件：" + assetPath);
+            }
+
+            ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            buffer.position(24);
+            int sampleRate = buffer.getInt();
+            buffer.position(22);
+            int channels = buffer.getShort() & 0xFFFF;
+            buffer.position(34);
+            int bitsPerSample = buffer.getShort() & 0xFFFF;
+
+            if (sampleRate != 16000 || channels != 1 || bitsPerSample != 16) {
+                throw new IOException(String.format(
+                    "不支持的音频格式：采样率=%dHz，通道数=%d，位深=%d",
+                    sampleRate, channels, bitsPerSample));
+            }
+
+            buffer.position(44);
+            int samples = (bytes.length - 44) / 2;
+            float[] audioData = new float[samples];
+            for (int i = 0; i < samples; i++) {
+                audioData[i] = buffer.getShort() / 32768.0f;
+            }
+            return audioData;
+        } catch (IOException e) {
+            Log.e(TAG, "从资产加载音频失败: " + assetPath, e);
+            return null;
+        }
+    }
+
+    // 简单校验WAV头（RIFF/WAVE）
+    private boolean isValidWavHeader(byte[] bytes) {
+        if (bytes == null || bytes.length < 44) return false;
+        return bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
+            && bytes[8] == 'W' && bytes[9] == 'A' && bytes[10] == 'V' && bytes[11] == 'E';
+    }
+
+    // 从assets读取文本内容
+    private String readAssetText(String assetPath) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (InputStream is = getAssets().open(assetPath);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))) {
+            String line;
+            while ((line = reader.readLine()) != null) sb.append(line);
+        }
+        return sb.toString();
+    }
+
+    // 根据lesson JSON路径和audio_reference解析音频资产路径
+    private String resolveAudioAssetPath(String lessonJsonPath, String audioRef) {
+        if (audioRef == null || audioRef.isEmpty()) return null;
+        try {
+            getAssets().open(audioRef).close();
+            Log.d(TAG, "音频引用直接存在: " + audioRef);
+            return audioRef;
+        } catch (IOException e) {
+            // 不是根路径，尝试相对于JSON所在目录
+        }
+        int idx = lessonJsonPath.lastIndexOf('/');
+        String baseDir = idx >= 0 ? lessonJsonPath.substring(0, idx) : "";
+        String candidate = (baseDir.isEmpty() ? audioRef : baseDir + "/" + audioRef);
+        try {
+            getAssets().open(candidate).close();
+            Log.d(TAG, "使用与JSON相同目录的音频路径: " + candidate);
+            return candidate;
+        } catch (IOException e) {
+            Log.w(TAG, "无法解析音频资产路径: " + audioRef + " 相对于 " + lessonJsonPath);
+            return null;
+        }
+    }
+
+    // 解析lesson JSON并进行音素分析（资产示例）
+    private void analyzeExerciseFromAssets(String lessonJsonPath) {
+        showProgress("正在分析示例练习...");
+        long __startMs = android.os.SystemClock.elapsedRealtime();
+        executorService.execute(() -> {
+            try {
+                String jsonStr = readAssetText(lessonJsonPath);
+                JSONObject root = new JSONObject(jsonStr);
+                JSONArray exercises = root.optJSONArray("exercises");
+                if (exercises == null || exercises.length() == 0) {
+                    throw new JSONException("练习列表为空");
+                }
+                JSONObject exercise = exercises.getJSONObject(0);
+                String audioRef = exercise.optString("audio_reference", "");
+                String originalText = exercise.optString("original_text", "").trim();
+                JSONArray originalPhones = exercise.optJSONArray("original_phones");
+                if (originalPhones == null) {
+                    throw new JSONException("缺少 original_phones 字段");
+                }
+
+                // 新增：计算并显示目标音素序列
+                String targetPhonemesDisplay = buildPhonemeDisplay(originalPhones);
+                mainHandler.post(() -> {
+                    etTargetText.setText(targetPhonemesDisplay);
+                    tvProgressText.setVisibility(View.VISIBLE);
+                    tvProgressText.setText("已读取目标音素，开始分析...");
+                });
+
+                String[] words = originalText.isEmpty() ? new String[0] : originalText.split("\\s+");
+                List<Integer> targetList = new ArrayList<>();
+                int[] wordPhoneCounts = new int[originalPhones.length()];
+                for (int i = 0; i < originalPhones.length(); i++) {
+                    JSONArray phoneArray = originalPhones.getJSONArray(i);
+                    int recognizedInWord = 0;
+                    for (int j = 0; j < phoneArray.length(); j++) {
+                        String phone = phoneArray.getString(j);
+                        int idxPh = phonemeMapper != null ? phonemeMapper.getPhonemeIndex(phone) : -1;
+                        if (idxPh >= 0) {
+                            targetList.add(idxPh);
+                            recognizedInWord++;
+                        } else {
+                            Log.w(TAG, "未知音素，跳过: " + phone);
+                        }
+                    }
+                    wordPhoneCounts[i] = recognizedInWord;
+                }
+                int[] targets = new int[targetList.size()];
+                for (int k = 0; k < targetList.size(); k++) targets[k] = targetList.get(k);
+
+                String audioAssetPath = resolveAudioAssetPath(lessonJsonPath, audioRef);
+                float[] audioData = null;
+                if (audioAssetPath != null) {
+                    audioData = loadAudioFromAssets(audioAssetPath);
+                }
+                if (audioData == null) {
+                    Log.w(TAG, "练习音频不可用，回退到测试音频 000010069.wav");
+                    audioData = loadAudioFromAssets("000010069.wav");
+                }
+                if (audioData == null) {
+                    throw new IOException("无法加载任何音频数据用于分析");
+                }
+
+
+                PhonemeAnalysisResult result = phonemeAnalyzer.analyzePhonemes(
+                        words,
+                        targets,
+                        audioData,
+                        0,
+                        wordPhoneCounts,
+                        getAssets()
+                );
+
+
+
+                mainHandler.post(() -> {
+                    hideProgress();
+                    displayAnalysisResult(result);
+                    // 保留目标音素显示，不再覆盖为原始文本
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "资产练习分析失败", e);
+                mainHandler.post(() -> {
+                    hideProgress();
+                    Toast.makeText(this, "示例分析失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+        long __endMs = android.os.SystemClock.elapsedRealtime();
+        Log.i(TAG, "analyzePhonemes耗时: " + (__endMs - __startMs) + " ms");
+    }
+
+
+    // 新增：将 original_phones 格式化为可读的音素序列，如 /h ə ˈloʊ/ /haʊ/
+    private String buildPhonemeDisplay(JSONArray originalPhones) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            for (int i = 0; i < originalPhones.length(); i++) {
+                JSONArray phoneArray = originalPhones.getJSONArray(i);
+                if (i > 0) sb.append(" ");
+                StringBuilder wordSb = new StringBuilder();
+                for (int j = 0; j < phoneArray.length(); j++) {
+                    if (j > 0) wordSb.append(" ");
+                    wordSb.append(phoneArray.getString(j));
+                }
+                sb.append("/").append(wordSb.toString()).append("/");
+            }
+        } catch (JSONException e) {
+            Log.w(TAG, "格式化目标音素失败", e);
+        }
+        return sb.toString();
+    }
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        
-        // 停止录音
-        if (isRecording) {
-            stopRecording();
-        }
-        
-        // 清理Handler回调
-        if (mainHandler != null && durationUpdateRunnable != null) {
-            mainHandler.removeCallbacks(durationUpdateRunnable);
-        }
         
         // 释放资源
         if (phonemeAnalyzer != null) {
@@ -554,11 +493,6 @@ public class PronunciationQualityActivity extends AppCompatActivity {
         
         if (executorService != null) {
             executorService.shutdown();
-        }
-        
-        // 清理临时文件
-        if (audioFile != null && audioFile.exists()) {
-            audioFile.delete();
         }
     }
 }

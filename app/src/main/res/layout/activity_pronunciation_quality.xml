@@ -49,12 +49,13 @@
                     android:id="@+id/et_target_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="请输入要练习的英文句子"
+                    android:hint="此处显示读取的目标音素或可手动输入"
                     android:text="Hello world, this is a test."
                     android:textSize="14sp"
                     android:background="@drawable/edittext_background"
                     android:padding="12dp"
-                    android:minLines="2" />
+                    android:minLines="2"
+                    android:fontFamily="monospace" />
 
             </LinearLayout>
 
@@ -111,8 +112,7 @@
                         android:textSize="16sp"
                         android:background="@drawable/button_secondary"
                         android:textColor="@android:color/white"
-                        android:padding="12dp"
-                        android:enabled="false" />
+                        android:padding="12dp" />
 
                 </LinearLayout>
 

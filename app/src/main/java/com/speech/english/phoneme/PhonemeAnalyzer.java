@@ -14,7 +14,7 @@ import java.io.InputStreamReader;
  */
 public class PhonemeAnalyzer {
     static {
-        System.loadLibrary("phoneme_analyzer");
+        System.loadLibrary("wav2vec2");
     }
     
     // 本地对象句柄

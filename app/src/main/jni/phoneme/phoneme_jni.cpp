@@ -4,10 +4,12 @@
 #include "../wav2vec2.h"
 #include <string>
 #include <vector>
+#include <cstring>
 #include <android/log.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include "net.h"
+#include <chrono>
 
 
 #define LOG_TAG "PhonemeJNI"
@@ -117,16 +119,25 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
         LOGE("AssetManager转换失败");
         return nullptr;
     }
-    
+    const TokenMapper& mapper = analyzer->getTokenMapper();
     // 初始化Wav2Vec2模型
     Wav2Vec2 wav2vec2Model;
-    if (!wav2vec2Model.init(assetManager)) {
+    auto __init_start = std::chrono::steady_clock::now();
+    bool __init_ok = wav2vec2Model.init(assetManager);
+    auto __init_end = std::chrono::steady_clock::now();
+    double __init_ms = std::chrono::duration<double, std::milli>(__init_end - __init_start).count();
+    LOGI("PQ-TIME Wav2Vec2模型初始化耗时: %.2f ms", __init_ms);
+    if (!__init_ok) {
         LOGE("Wav2Vec2模型初始化失败");
         return nullptr;
     }
     
     // 使用Wav2Vec2进行推理
+    auto __infer_start = std::chrono::steady_clock::now();
     bool inferenceSuccess = wav2vec2Model.processInference(audioData.data(), audioData.size());
+    auto __infer_end = std::chrono::steady_clock::now();
+    double __infer_ms = std::chrono::duration<double, std::milli>(__infer_end - __infer_start).count();
+    LOGI("PQ-TIME Wav2Vec2推理耗时: %.2f ms", __infer_ms);
     if (!inferenceSuccess) {
         LOGE("Wav2Vec2推理失败");
         return nullptr;
@@ -134,8 +145,10 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
     
     // 获取模型输出用于强制对齐和音素分析
     const ncnn::Mat& modelOutput = wav2vec2Model.getLastOutput();
-    int vocabSize = wav2vec2::OutputConfig::NUM_TOKENS;
-    int timeSteps = modelOutput.w;
+    LOGI("ModelOutput dims: w=%d h=%d c=%d dims=%d", modelOutput.w, modelOutput.h, modelOutput.c, modelOutput.dims);
+    int vocabSize = modelOutput.w;
+    int timeSteps = (modelOutput.h > 0) ? modelOutput.h : 1;
+    int channels = (modelOutput.c > 0) ? modelOutput.c : 1;
     
     // blankId兜底处理
     int actualBlankId = blankId;
@@ -145,8 +158,12 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
     }
     
     // 直接使用lastOutput进行强制对齐
+    auto __align_start = std::chrono::steady_clock::now();
     speech::alignment::AlignmentResult alignResult = 
         speech::alignment::ForceAligner::align(modelOutput, targets, actualBlankId);
+    auto __align_end = std::chrono::steady_clock::now();
+    double __align_ms = std::chrono::duration<double, std::milli>(__align_end - __align_start).count();
+    LOGI("PQ-TIME 强制对齐耗时: %.2f ms", __align_ms);
     
     if (alignResult.empty()) {
         LOGE("强制对齐失败");
@@ -186,8 +203,10 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
             span.end = segment.endFrame;
             span.score = segment.scoreMean;
             
-            // 填充span.text (需要tokenMapper，这里暂时留空)
-            span.text = "";
+            // 使用已初始化的TokenMapper将token ID映射为音素文本
+
+            std::string phonemeText = mapper.getTokenById(span.token);
+            span.text = phonemeText.empty() ? std::string("") : phonemeText;
             
             spans.push_back(span);
             segmentIndex++;
@@ -197,12 +216,16 @@ jobject PhonemeJNI::nativeAnalyzePhonemes(
     }
     
     // 直接从modelOutput构造logits向量，避免重复复制
-    int totalElements = vocabSize * timeSteps;
+    int totalElements = vocabSize * timeSteps * channels;
     std::vector<float> logits(totalElements);
-    memcpy(logits.data(), modelOutput.data, totalElements * sizeof(float));
+    std::memcpy(logits.data(), modelOutput.data, static_cast<size_t>(totalElements) * sizeof(float));
     
     // 分析音素
+    auto __pa_start = std::chrono::steady_clock::now();
     PhonemeAnalysisResult result = analyzer->analyzePhonemes(wordSpans, words, logits, vocabSize);
+    auto __pa_end = std::chrono::steady_clock::now();
+    double __pa_ms = std::chrono::duration<double, std::milli>(__pa_end - __pa_start).count();
+    LOGI("PQ-TIME 音素分析耗时: %.2f ms", __pa_ms);
     
     // 创建Java的PhonemeAnalysisResult对象
     jclass resultClass = env->FindClass("com/speech/english/phoneme/PhonemeAnalysisResult");
